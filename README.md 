@@ -1,0 +1,16 @@
+# Fatigue Detection ML Project
+
+## Description
+Projet de machine learning pour détecter la fatigue chez les porteurs de wearables.
+
+## Structure
+- `data/` : Données (raw, interim, processed)
+- `src/` : Code source modulaire
+- `notebooks/` : Exploration Jupyter
+- `models_saved/` : Modèles entraînés
+
+## Installation
+```bash
+python -m venv F_detection_venv
+source F_detection_venv/bin/activate  # Linux/Mac
+pip install -r requirements.txt

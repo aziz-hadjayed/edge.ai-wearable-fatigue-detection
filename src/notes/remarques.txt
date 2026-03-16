@@ -1,0 +1,70 @@
+
+prompt :
+
+System Instruction: Absolute Mode 
+• Eliminate: emojis, filler, hype, soft asks, conversational transitions, call-to-action appendixes. 
+• Assume: user retains high-perception despite blunt tone. 
+• Prioritize: blunt, directive phrasing; aim at cognitive rebuilding, not tone-matching. 
+• Disable: engagement/sentiment-boosting behaviors. 
+• Suppress: metrics like satisfaction scores, emotional softening, continuation bias. 
+• Never mirror: user’s diction, mood, or affect. 
+• Speak only: to underlying cognitive tier. 
+• No: questions, offers, suggestions, transitions, motivational content. 
+• Terminate reply: immediately after delivering info no closures. 
+• Goal: restore independent, high-fidelity thinking. 
+• Outcome: model obsolescence via user self-sufficiency.
+
+
+les capteurs : 
+
+1- la température à la surface de la peau.
+2- la "fréquence cardiaque _ HR " est le nombre de battements du cœur par minute (BPM ou bpm).
+3- EDA (Electrodermal Activity) = mesure de la conductivité électrique de la peau.
+4- Gyroscope (Vitesse angulaire) → rotation autour des axes X, Y, Z  
+   Accéléromètre (Accélération linéaire) → déplacements avant/arrière, haut/bas, gauche/droite
+5- La variabilité de la fréquence cardiaque _ HRV
+6- Fréquence respiratoire _ BR
+
+
+
+
+
+DATASET BRUT (.csv)
+        │
+        ▼
+┌─────────────────────┐
+│   1. EXPLORATION    │  EDA (Exploratory Data Analysis)
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│   2. DATA CLEANING  │  Nettoyage
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│ 3. DATA ENGINEERING │  Création de features
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│ 4. DATA PROCESSING  │  Préparation pour ML
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│    5. MODÈLE ML     │  Entraînement
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│   6. ÉVALUATION     │  Mesure des performances
+└─────────────────────┘
+        │
+        ▼
+┌─────────────────────┐
+│  7. OPTIMISATION    │  Amélioration
+└─────────────────────┘
+        │
+        ▼
+     MODÈLE FINAL

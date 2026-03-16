@@ -1,0 +1,23 @@
+
+# Environnement virtuel
+F_detection_venv/
+venv/
+env/
+
+# Données lourdes
+dataset/
+data/
+
+# Modèles sauvegardés
+models_saved/
+
+
+# Fichiers temporaires
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Secrets
+.env
+credentials.json
+
