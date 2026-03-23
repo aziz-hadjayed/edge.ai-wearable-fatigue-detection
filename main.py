@@ -10,10 +10,30 @@ from src.train import *
 if __name__ == "__main__":
     load_dotenv()
     # 1. Charger et préparer les données
-    df = load_raw_data(DATA_RAW)
     df = clean_data(df)
     X, y = encode_features(df)
     X = normalize_features(X)
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
 
     # 2. Split train/test
     X_train, X_test, y_train, y_test = train_test_split(
@@ -36,3 +56,8 @@ if __name__ == "__main__":
         json.dump(results, f, indent=4)
 
     print("Pipeline terminé!")
+
+
+
+
+

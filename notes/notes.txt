@@ -1,0 +1,72 @@
+
+Device	                               Sensors
+Nokia Bell Labs earable prototype	Accelerometer
+                                       Gyroscope
+                                  Photoplethysmography
+Muse S EEG Headband	              Electroencephalography
+                                       Accelerometer
+                                        Gyroscope
+Zephyr BioHarness 3.0 chest band	Electrocardiography
+                                      Breathing sensor
+                                       Accelerometer
+                                       Posture sensor
+Empatica E4 wristband	                Accelerometer
+                                  Blood volume pulse and IBI
+                                   Electrodermal activity
+                                        Skin temperature
+
+
+
+Le dossier datasets/archive/fatigueset/01/01 contient les données de la Session 1 pour le Participant 1. Il s'agit d'un ensemble de données multimodal utilisé pour la détection de la fatigue, regroupant des capteurs physiologiques et des résultats d'expériences cognitives.
+
+Voici une explication détaillée du contenu, classée par type de source :
+
+
+
+
+1. Capteurs au Poignet (SENSOS WRIST)
+Ces fichiers proviennent probablement d'un appareil de type Empatica E4 :
+
+wrist_acc.csv : Accélération triaxiale ($ax, ay, az$). Utilisé pour l'activité physique.
+wrist_bvp.csv : Volume du Pouls Sanguin (Blood Volume Pulse). Permet de calculer la fréquence cardiaque.
+wrist_eda.csv : Activité Électrodermale (Sueur/Stress).
+wrist_hr.csv : Fréquence Cardiaque (Heart Rate) calculée.
+wrist_ibi.csv : Intervalle Inter-Battements (Inter-Beat Interval).
+wrist_skin_temperature.csv : Température cutanée.
+
+
+
+
+2. Capteurs de Poitrine (CHEST / Zephyr)
+Données haute fidélité provenant d'une ceinture thoracique (ex: Zephyr BioHarness) :
+
+chest_raw_ecg.csv : Électrocardiogramme brut.
+chest_raw_breathing.csv : Respiration brute.
+chest_raw_acc.csv : Accéléromètre de poitrine.
+chest_physiology_summary.csv / zephyr_activity_summary.csv : Résumés des métriques (pouls, rythme respiratoire, posture).
+chest_rr_interval.csv : Intervalles R-R (variabilité cardiaque HRV).
+
+
+
+
+
+3. Capteurs de Tête (FOREHEAD / EEG / MUSE)
+Données liées à l'activité cérébrale et aux mouvements de la tête :
+
+forehead_eeg_raw.csv : Signaux EEG bruts.
+forehead_eeg_alpha_abs.csv à theta_abs.csv : Puissance absolue des différentes bandes de fréquences cérébrales (Alpha, Beta, Delta, Gamma, Theta), cruciales pour mesurer la somnolence.
+forehead_acc.csv / forehead_gyro.csv : Mouvements de la tête.
+muse_blinks.csv : Fréquence des clignements d'yeux (indicateur fort de fatigue).
+muse_jaw_clenches.csv : Contractions de la mâchoire.
+4. Capteurs d'Oreilles (EAR)
+ear_acc_left/right.csv : Accéléromètres intégrés dans des écouteurs.
+ear_gyro_left/right.csv : Gyroscopes (mouvement de rotation de la tête).
+ear_ppg_left/right.csv : Photopléthysmographie pour la fréquence cardiaque à l'oreille.
+
+
+
+
+le site des meteo : https://www.cl.cam.ac.uk/weather/data/daily-text/2021_MM_jj
+
+
+
