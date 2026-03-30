@@ -21,3 +21,7 @@ __pycache__/
 .env
 credentials.json
 
+# doc
+README1.md
+RAPPORT_TRAVAIL.md
+ADAPTIVE_LOSO_GUIDE.md

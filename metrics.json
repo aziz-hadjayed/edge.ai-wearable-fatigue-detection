@@ -1,0 +1,182 @@
+{
+    "model_name": "CNN_1D_LOSO",
+    "training_strategy": "LOSO_ADAPTIVE",
+    "adaptive_config": {
+        "description": "Participants difficiles re\u00e7oivent fen\u00eatres + epochs augment\u00e9s",
+        "difficult_participants": [
+            3,
+            7,
+            11
+        ],
+        "configs": {
+            "3": {
+                "window_size": 480,
+                "step_size": 240,
+                "epochs": 15
+            },
+            "7": {
+                "window_size": 480,
+                "step_size": 240,
+                "epochs": 15
+            },
+            "11": {
+                "window_size": 480,
+                "step_size": 240,
+                "epochs": 15
+            },
+            "default": {
+                "window_size": 240,
+                "step_size": 120,
+                "epochs": 10
+            }
+        }
+    },
+    "hyperparameters": {
+        "window_size": 240,
+        "step_size": 120,
+        "epochs": 10,
+        "batch_size": 64
+    },
+    "folds": [
+        {
+            "Fold": 1,
+            "Test_Participant": 1,
+            "F1_Macro": 0.6234371849163137,
+            "F1_Weighted": 0.5821612220205687,
+            "Balanced_Accuracy": 0.6944444444444443,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 2,
+            "Test_Participant": 2,
+            "F1_Macro": 0.6886913686014137,
+            "F1_Weighted": 0.7016063396872992,
+            "Balanced_Accuracy": 0.7030600118835414,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 3,
+            "Test_Participant": 3,
+            "F1_Macro": 0.4483333333333333,
+            "F1_Weighted": 0.47833333333333333,
+            "Balanced_Accuracy": 0.5416666666666666,
+            "Window_Size": 480,
+            "Step_Size": 240,
+            "Epochs": 15,
+            "Config_Type": "ADAPTIVE"
+        },
+        {
+            "Fold": 4,
+            "Test_Participant": 4,
+            "F1_Macro": 0.880513614659956,
+            "F1_Weighted": 0.892371851036806,
+            "Balanced_Accuracy": 0.8813405797101449,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 5,
+            "Test_Participant": 5,
+            "F1_Macro": 1.0,
+            "F1_Weighted": 1.0,
+            "Balanced_Accuracy": 1.0,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 6,
+            "Test_Participant": 6,
+            "F1_Macro": 0.8373015873015873,
+            "F1_Weighted": 0.83091202582728,
+            "Balanced_Accuracy": 0.8429951690821257,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 7,
+            "Test_Participant": 7,
+            "F1_Macro": 0.555026455026455,
+            "F1_Weighted": 0.5678266178266178,
+            "Balanced_Accuracy": 0.5972222222222222,
+            "Window_Size": 480,
+            "Step_Size": 240,
+            "Epochs": 15,
+            "Config_Type": "ADAPTIVE"
+        },
+        {
+            "Fold": 8,
+            "Test_Participant": 8,
+            "F1_Macro": 0.9232456140350878,
+            "F1_Weighted": 0.9060587515299877,
+            "Balanced_Accuracy": 0.9259259259259259,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 9,
+            "Test_Participant": 9,
+            "F1_Macro": 0.5979166666666667,
+            "F1_Weighted": 0.6084051724137931,
+            "Balanced_Accuracy": 0.6670736670736671,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 10,
+            "Test_Participant": 10,
+            "F1_Macro": 0.8889065018097276,
+            "F1_Weighted": 0.8846512201350912,
+            "Balanced_Accuracy": 0.9074074074074074,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        },
+        {
+            "Fold": 11,
+            "Test_Participant": 11,
+            "F1_Macro": 0.6587301587301587,
+            "F1_Weighted": 0.6500821018062398,
+            "Balanced_Accuracy": 0.6767676767676768,
+            "Window_Size": 480,
+            "Step_Size": 240,
+            "Epochs": 15,
+            "Config_Type": "ADAPTIVE"
+        },
+        {
+            "Fold": 12,
+            "Test_Participant": 12,
+            "F1_Macro": 0.7394636015325671,
+            "F1_Weighted": 0.7422634836427939,
+            "Balanced_Accuracy": 0.7523148148148149,
+            "Window_Size": 240,
+            "Step_Size": 120,
+            "Epochs": 10,
+            "Config_Type": "STANDARD"
+        }
+    ],
+    "summary": {
+        "F1_Macro_mean": 0.7367971738844389,
+        "F1_Macro_std": 0.1691523116049314,
+        "F1_Weighted_mean": 0.7370560099383177,
+        "F1_Weighted_std": 0.16442336660026413,
+        "Balanced_Accuracy_mean": 0.7658515488332198,
+        "Balanced_Accuracy_std": 0.14314294542998093
+    }
+}

@@ -24,7 +24,6 @@ RANDOM_STATE   = 42
 
 
 
-
 COL_PARTICIPANT = "participant"
 COL_SESSION     = "session"
 COL_TIMESTAMP   = "timestamp"

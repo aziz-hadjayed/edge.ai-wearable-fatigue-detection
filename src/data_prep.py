@@ -48,9 +48,9 @@ def data_clean_1(path):
                     continue
 
                 merged = df if merged is None else pd.merge_asof(
-                    merged.sort_values("timestamp"),
-                    df.sort_values("timestamp"),
-                    on="timestamp",
+                    merged.sort_values(COL_TIMESTAMP),
+                    df.sort_values(COL_TIMESTAMP),
+                    on=COL_TIMESTAMP,
                     tolerance=TARGET_PERIOD,
                     direction="nearest"
                 )
@@ -59,9 +59,9 @@ def data_clean_1(path):
             if b_path.exists():
                 df_b = compute_breathing_rpm(b_path)
                 merged = pd.merge_asof(
-                merged.sort_values("timestamp"),
-                df_b.sort_values("timestamp"),
-                on="timestamp",
+                merged.sort_values(COL_TIMESTAMP),
+                df_b.sort_values(COL_TIMESTAMP),
+                on=COL_TIMESTAMP,
                 tolerance=TARGET_PERIOD,
                 direction="nearest"
             )
@@ -70,7 +70,7 @@ def data_clean_1(path):
                 continue
 
             # DEBUG 
-            print("timestamp range:", merged["timestamp"].min(), merged["timestamp"].max())
+            print("timestamp range:", merged[COL_TIMESTAMP].min(), merged[COL_TIMESTAMP].max())
 
             merged = assign_labels(merged, intervals)
 
@@ -78,8 +78,8 @@ def data_clean_1(path):
                 print("toujours vide")
                 continue
 
-            merged["participant"] = p_dir.name
-            merged["session"] = s_dir.name
+            merged[COL_PARTICIPANT] = p_dir.name
+            merged[COL_SESSION] = s_dir.name
 
             all_data.append(merged)
 
@@ -399,7 +399,7 @@ def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-# ──   ─────────────────────────────────────────
+# ──  RobustScaler (robuste aux outliers, Q1/Q3) ─────────────────────────────────────────
 def normalize_features(
     X: pd.DataFrame,
     scaler: RobustScaler = None,

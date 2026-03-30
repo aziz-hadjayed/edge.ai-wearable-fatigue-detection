@@ -1,4 +1,4 @@
-# ------------------------------------------// Importations
+# --------------------------------------------------------------------// Importations
 
 from src.config import *
 
@@ -6,9 +6,6 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from scipy.signal import butter, filtfilt, find_peaks
-
-
-
 
 
 
@@ -38,7 +35,6 @@ TARGET_FREQ   = 4
 TARGET_PERIOD = 250  # ms
 
 # ── Colonnes ──────────────────────────────────────────────────────────────────
-#    "chest_physiology_summary.csv": {"hr": "chest_hr","br": "chest_br","posture": "chest_posture","hrv": "chest_hrv",},
 FILE_COLS = {
 
     "wrist_acc.csv": {"ax": "acc_x", "ay": "acc_y", "az": "acc_z"},
