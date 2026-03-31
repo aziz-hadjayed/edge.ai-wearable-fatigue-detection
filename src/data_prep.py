@@ -361,6 +361,45 @@ def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:
 
 
 
+# ──  Suppression des doublons ─────────────────────────────────────────
+def remove_duplicates(df: pd.DataFrame, keep: str = "first") -> pd.DataFrame:
+    """
+    Supprime les doublons du dataset.
+
+    Stratégie :
+      1. Doublons exacts (toutes colonnes)  -> supprimes en premier
+      2. Doublons de timestamp par groupe (participant, session) -> garder keep
+
+    Parametres
+    ----------
+    df   : DataFrame a nettoyer
+    keep : 'first' (defaut) | 'last' | False (supprime toutes les occurrences)
+
+    Retourne
+    --------
+    DataFrame nettoye.
+    """
+    print("\n" + "=" * 60)
+    print("SUPPRESSION DES DOUBLONS (remove_duplicates)")
+    print("=" * 60)
+
+    df = df.copy()
+    n0 = len(df)
+
+    # 1. Doublons exacts
+    df = df.drop_duplicates(keep=keep)
+    n1 = len(df)
+    print(f"Doublons exacts supprimes           : {n0 - n1} ({n0} -> {n1})")
+
+    # 2. Doublons de timestamp par groupe participant/session
+    key_cols = [c for c in [COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP] if c in df.columns]
+    df = df.drop_duplicates(subset=key_cols, keep=keep).reset_index(drop=True)
+    n2 = len(df)
+    print(f"Doublons timestamp/groupe supprimes : {n1 - n2} ({n1} -> {n2})")
+
+    print(f"\nremove_duplicates termine | Shape : {df.shape}")
+    return df
+
 # ── Label encodé : baseline=-1 | activity=0 | fatigue=1  et Séparation X / y─────────────────────────────────────────
 def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """
