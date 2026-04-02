@@ -63,11 +63,11 @@
         "verbose": -1
     },
     "summary": {
-        "F1_Macro_mean": 0.7616472714596146,
-        "F1_Macro_std": 0.16701782631909765,
-        "F1_Weighted_mean": 0.752907101745446,
-        "F1_Weighted_std": 0.1869001203326231,
-        "Balanced_Accuracy_mean": 0.7868110285174699,
-        "Balanced_Accuracy_std": 0.140891051493602
+        "F1_Macro_mean": 0.7685816956021613,
+        "F1_Macro_std": 0.16994129348530862,
+        "F1_Weighted_mean": 0.7592283177742026,
+        "F1_Weighted_std": 0.18949743989397513,
+        "Balanced_Accuracy_mean": 0.7932072273478791,
+        "Balanced_Accuracy_std": 0.14383242538052815
     }
 }

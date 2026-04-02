@@ -8,6 +8,7 @@ import lightgbm as lgb
 from pathlib import Path
 from sklearn.metrics import classification_report, f1_score, balanced_accuracy_score
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.preprocessing import RobustScaler
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import *

@@ -1,22 +1,16 @@
 # ------------------------------------------// Importations
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from src.fonctions_principal_clean_data_1 import *
-from src.config import *
 
-
+import numpy as np
+import pandas as pd
 from sklearn.preprocessing import RobustScaler
 
+from src.config import *
+from src.fonctions_principal_clean_data_1 import *
+
+
 # ------------------------------------------// Fonctions de préparation des données
-# def load_raw_data(path):
- #   df=pd.read_csv(path)
-  #  print(df.head())
-   # print(os.getcwd())
-    #return df
-
-
-
+#
 # ──  structué le data et constoire la colonne label et fusion des fichiers et synchro les frequences des capteurs (4 Hz) et calcule de la rpm avec Filtrage Passe-Bande (Butterworth) ─────────────────────────────────────────
 def data_clean_1(path):
     all_data = []
@@ -33,7 +27,7 @@ def data_clean_1(path):
 
             intervals = get_label_intervals(s_dir / PATH_MARKERS)
             if not intervals:
-                continue 
+                continue
 
             merged = None
 
@@ -47,30 +41,38 @@ def data_clean_1(path):
                 if df is None:
                     continue
 
-                merged = df if merged is None else pd.merge_asof(
-                    merged.sort_values(COL_TIMESTAMP),
-                    df.sort_values(COL_TIMESTAMP),
-                    on=COL_TIMESTAMP,
-                    tolerance=TARGET_PERIOD,
-                    direction="nearest"
+                merged = (
+                    df
+                    if merged is None
+                    else pd.merge_asof(
+                        merged.sort_values(COL_TIMESTAMP),
+                        df.sort_values(COL_TIMESTAMP),
+                        on=COL_TIMESTAMP,
+                        tolerance=TARGET_PERIOD,
+                        direction="nearest",
+                    )
                 )
             # breathing
             b_path = s_dir / PATH_BREATHING
             if b_path.exists():
                 df_b = compute_breathing_rpm(b_path)
                 merged = pd.merge_asof(
-                merged.sort_values(COL_TIMESTAMP),
-                df_b.sort_values(COL_TIMESTAMP),
-                on=COL_TIMESTAMP,
-                tolerance=TARGET_PERIOD,
-                direction="nearest"
-            )
+                    merged.sort_values(COL_TIMESTAMP),
+                    df_b.sort_values(COL_TIMESTAMP),
+                    on=COL_TIMESTAMP,
+                    tolerance=TARGET_PERIOD,
+                    direction="nearest",
+                )
 
             if merged is None:
                 continue
 
-            # DEBUG 
-            print("timestamp range:", merged[COL_TIMESTAMP].min(), merged[COL_TIMESTAMP].max())
+            # DEBUG
+            print(
+                "timestamp range:",
+                merged[COL_TIMESTAMP].min(),
+                merged[COL_TIMESTAMP].max(),
+            )
 
             merged = assign_labels(merged, intervals)
 
@@ -87,35 +89,29 @@ def data_clean_1(path):
     if all_data:
         df = pd.concat(all_data)
         return df
-      #  df.to_csv(OUTPUT_DIR / "dataset_clean_1.csv", index=False)
+    #  df.to_csv(OUTPUT_DIR / "dataset_clean_1.csv", index=False)
 
-       # print("\n SUCCESS")
-        #print("Lignes:", len(df))
-        #print(df["label"].value_counts())
-    
+    # print("\n SUCCESS")
+    # print("Lignes:", len(df))
+    # print(df["label"].value_counts())
+
     else:
         print("\n Toujours aucune donnée (vérifier timestamps)")
-
-
-
-
-
-
 
 
 # ── visualition des données trouvé de data_clean_1 ─────────────────────────────────────────
 def visualize_data(df):
 
-    
     # ── Noms réels des colonnes ───────────────────────────────────────────────────
-
 
     print("=" * 70)
     print("1. INFORMATIONS GÉNÉRALES")
     print("=" * 70)
     print(f"Lignes                : {len(df)}")
     print(f"Colonnes              : {len(df.columns)}")
-    print(f"Taille mémoire        : {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+    print(
+        f"Taille mémoire        : {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB"
+    )
     print(f"\nColonnes              : {df.columns.tolist()}")
 
     print("\n" + "=" * 70)
@@ -134,14 +130,11 @@ def visualize_data(df):
     print("\n" + "=" * 70)
     print("4. VALEURS MANQUANTES")
     print("=" * 70)
-    missing     = df.isna().sum()
+    missing = df.isna().sum()
     missing_pct = (df.isna().sum() / len(df) * 100).round(2)
-    missing_df  = pd.DataFrame({
-    "Nb manquants" : missing,
-    "Pourcentage"  : missing_pct
-    })
+    missing_df = pd.DataFrame({"Nb manquants": missing, "Pourcentage": missing_pct})
     missing_df = missing_df[missing_df["Nb manquants"] > 0].sort_values(
-    "Pourcentage", ascending=False
+        "Pourcentage", ascending=False
     )
     if missing_df.empty:
         print("✔ Aucune valeur manquante")
@@ -168,9 +161,13 @@ def visualize_data(df):
     print(f"Participants concernés : {dup_ts[COL_PARTICIPANT].unique()}")
     print(f"Sessions concernées    : {dup_ts[COL_SESSION].unique()}")
     print(f"\nExemple de timestamps dupliqués :")
-    print(df[df.duplicated(subset=[COL_TIMESTAMP], keep=False)]
-      [[COL_TIMESTAMP, COL_PARTICIPANT, COL_SESSION, COL_LABEL]]
-      .head(10).to_string())
+    print(
+        df[df.duplicated(subset=[COL_TIMESTAMP], keep=False)][
+            [COL_TIMESTAMP, COL_PARTICIPANT, COL_SESSION, COL_LABEL]
+        ]
+        .head(10)
+        .to_string()
+    )
 
     # Doublons par participant/session
     print(f"\nDoublons par participant/session :")
@@ -187,42 +184,67 @@ def visualize_data(df):
     print("6. STATISTIQUES DESCRIPTIVES")
     print("=" * 70)
     stats = df[NUM_COLS].describe().T
-    stats["median"]   = df[NUM_COLS].median()
+    stats["median"] = df[NUM_COLS].median()
     stats["skewness"] = df[NUM_COLS].skew()
     stats["kurtosis"] = df[NUM_COLS].kurt()
-    print(stats[["count", "mean", "std", "min", "25%",
-             "50%", "median", "75%", "max",
-             "skewness", "kurtosis"]].round(3).to_string())
+    print(
+        stats[
+            [
+                "count",
+                "mean",
+                "std",
+                "min",
+                "25%",
+                "50%",
+                "median",
+                "75%",
+                "max",
+                "skewness",
+                "kurtosis",
+            ]
+        ]
+        .round(3)
+        .to_string()
+    )
 
     print("\n" + "=" * 70)
     print("7. DISTRIBUTION DES LABELS")
     print("=" * 70)
     label_counts = df[COL_LABEL].value_counts()
-    label_pct    = df[COL_LABEL].value_counts(normalize=True) * 100
-    label_df     = pd.DataFrame({
-        "Nb lignes"   : label_counts,
-        "Pourcentage" : label_pct.round(2)
-    })
+    label_pct = df[COL_LABEL].value_counts(normalize=True) * 100
+    label_df = pd.DataFrame(
+        {"Nb lignes": label_counts, "Pourcentage": label_pct.round(2)}
+    )
     print(label_df.to_string())
-    print(f"\nClasses équilibrées : "
-      f"{'✔ Oui' if label_pct.max() - label_pct.min() < 10 else '✗ Non (déséquilibré)'}")
+    print(
+        f"\nClasses équilibrées : "
+        f"{'✔ Oui' if label_pct.max() - label_pct.min() < 10 else '✗ Non (déséquilibré)'}"
+    )
 
     print("\n" + "=" * 70)
     print("8. DISTRIBUTION PAR PARTICIPANT")
     print("=" * 70)
-    part_stats = df.groupby(COL_PARTICIPANT).agg(
-        nb_lignes   = (COL_TIMESTAMP, "count"),
-        nb_sessions = (COL_SESSION,   "nunique"),
-    ).reset_index()
+    part_stats = (
+        df.groupby(COL_PARTICIPANT)
+        .agg(
+            nb_lignes=(COL_TIMESTAMP, "count"),
+            nb_sessions=(COL_SESSION, "nunique"),
+        )
+        .reset_index()
+    )
     print(part_stats.to_string())
 
     print("\n" + "=" * 70)
     print("9. DISTRIBUTION PAR SESSION")
     print("=" * 70)
-    sess_stats = df.groupby([COL_PARTICIPANT, COL_SESSION]).agg(
-        nb_lignes  = (COL_TIMESTAMP, "count"),
-        label_dist = (COL_LABEL, lambda x: x.value_counts().to_dict())
-    ).reset_index()
+    sess_stats = (
+        df.groupby([COL_PARTICIPANT, COL_SESSION])
+        .agg(
+            nb_lignes=(COL_TIMESTAMP, "count"),
+            label_dist=(COL_LABEL, lambda x: x.value_counts().to_dict()),
+        )
+        .reset_index()
+    )
     print(sess_stats.to_string())
 
     print("\n" + "=" * 70)
@@ -236,11 +258,13 @@ def visualize_data(df):
         expected_interval = 250  # ms à 4Hz
         anomalies = diffs[diffs > expected_interval * 2]
 
-        print(f"  P{pid}/S{sid} → "
-          f"intervalle moy={diffs.mean():.1f}ms | "
-          f"min={diffs.min():.1f}ms | "
-          f"max={diffs.max():.1f}ms | "
-          f"sauts>{expected_interval*2}ms : {len(anomalies)}")
+        print(
+            f"  P{pid}/S{sid} → "
+            f"intervalle moy={diffs.mean():.1f}ms | "
+            f"min={diffs.min():.1f}ms | "
+            f"max={diffs.max():.1f}ms | "
+            f"sauts>{expected_interval * 2}ms : {len(anomalies)}"
+        )
 
     print("\n" + "=" * 70)
     print("11. VALEURS ABERRANTES (outliers IQR)")
@@ -248,15 +272,17 @@ def visualize_data(df):
     print(f"{'Colonne':<20} {'Outliers':<10} {'%':<8} {'Min':<12} {'Max':<12}")
     print("-" * 65)
     for col in NUM_COLS:
-        Q1      = df[col].quantile(0.25)
-        Q3      = df[col].quantile(0.75)
-        IQR     = Q3 - Q1
-        lower   = Q1 - 1.5 * IQR
-        upper   = Q3 + 1.5 * IQR
+        Q1 = df[col].quantile(0.25)
+        Q3 = df[col].quantile(0.75)
+        IQR = Q3 - Q1
+        lower = Q1 - 1.5 * IQR
+        upper = Q3 + 1.5 * IQR
         outliers = df[(df[col] < lower) | (df[col] > upper)]
-        pct     = len(outliers) / len(df) * 100
-        print(f"{col:<20} {len(outliers):<10} {pct:<8.2f} "
-          f"{df[col].min():<12.3f} {df[col].max():<12.3f}")
+        pct = len(outliers) / len(df) * 100
+        print(
+            f"{col:<20} {len(outliers):<10} {pct:<8.2f} "
+            f"{df[col].min():<12.3f} {df[col].max():<12.3f}"
+        )
 
     print("\n" + "=" * 70)
     print("12. CORRÉLATIONS ENTRE SIGNAUX")
@@ -277,12 +303,9 @@ def visualize_data(df):
     print("=" * 70)
     ts_min = df[COL_TIMESTAMP].min()
     ts_max = df[COL_TIMESTAMP].max()
-    print(f"Timestamp min : {ts_min:.0f} "
-      f"({pd.to_datetime(ts_min, unit='ms')})")
-    print(f"Timestamp max : {ts_max:.0f} "
-      f"({pd.to_datetime(ts_max, unit='ms')})")
-    print(f"Durée totale  : "
-      f"{(ts_max - ts_min) / 1000 / 3600:.2f} heures")
+    print(f"Timestamp min : {ts_min:.0f} ({pd.to_datetime(ts_min, unit='ms')})")
+    print(f"Timestamp max : {ts_max:.0f} ({pd.to_datetime(ts_max, unit='ms')})")
+    print(f"Durée totale  : {(ts_max - ts_min) / 1000 / 3600:.2f} heures")
 
     print("\n" + "=" * 70)
     print("15. RÉSUMÉ FINAL")
@@ -291,14 +314,18 @@ def visualize_data(df):
     print(f"✔ Participants             : {df[COL_PARTICIPANT].nunique()}")
     print(f"✔ Sessions par participant : {df[COL_SESSION].nunique()}")
     print(f"✔ Colonnes signaux         : {len(NUM_COLS)}")
-    print(f"{'✔' if n_duplicates    == 0 else '✗'} Doublons                  : {n_duplicates}")
-    print(f"{'✔' if n_dup_ts        == 0 else '⚠'} Timestamps dupliqués      : {n_dup_ts} ({n_dup_ts/len(df)*100:.1f}%)")
-    print(f"{'✔' if df.isna().sum().sum() == 0 else '✗'} Valeurs manquantes        : {df.isna().sum().sum()}")
-    print(f"{'✔' if label_pct.max() - label_pct.min() < 10 else '⚠'} Équilibre des classes     : {label_df['Pourcentage'].to_dict()}")
-
-
-
-
+    print(
+        f"{'✔' if n_duplicates == 0 else '✗'} Doublons                  : {n_duplicates}"
+    )
+    print(
+        f"{'✔' if n_dup_ts == 0 else '⚠'} Timestamps dupliqués      : {n_dup_ts} ({n_dup_ts / len(df) * 100:.1f}%)"
+    )
+    print(
+        f"{'✔' if df.isna().sum().sum() == 0 else '✗'} Valeurs manquantes        : {df.isna().sum().sum()}"
+    )
+    print(
+        f"{'✔' if label_pct.max() - label_pct.min() < 10 else '⚠'} Équilibre des classes     : {label_df['Pourcentage'].to_dict()}"
+    )
 
 
 # ──  Supprime breathing_q ,ffill/bfill par groupe  pour traite les NaN de ( ibi, temp, wrist_hr, eda) puis median ,   et Log transform EDA  log(1+x) (réduire asymétrie ) ,─────────────────────────────────────────
@@ -327,9 +354,8 @@ def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:
     nan_before = df[SIGNAL_COLS].isna().sum().sum()
     print(f"\nNaN avant : {nan_before}")
 
-    df[SIGNAL_COLS] = (
-        df.groupby([COL_PARTICIPANT, COL_SESSION])[SIGNAL_COLS]
-        .transform(lambda x: x.ffill().bfill())
+    df[SIGNAL_COLS] = df.groupby([COL_PARTICIPANT, COL_SESSION])[SIGNAL_COLS].transform(
+        lambda x: x.ffill().bfill()
     )
 
     nan_after = df[SIGNAL_COLS].isna().sum().sum()
@@ -345,20 +371,17 @@ def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:
 
     # 1.3 ── Log transform EDA ────────────────────────────────────────────
     skew_before = df["eda"].skew()
-    df["eda"]   = np.log1p(df["eda"])
+    df["eda"] = np.log1p(df["eda"])
     print(f"✔ EDA log1p | asymétrie : {skew_before:.3f} → {df['eda'].skew():.3f}")
 
     # 1.4 ── Tri participant / session ────────────────────────────────────
     df = df.sort_values(
-        by=[COL_PARTICIPANT, COL_SESSION],
-        ascending=[True, True]
+        by=[COL_PARTICIPANT, COL_SESSION], ascending=[True, True]
     ).reset_index(drop=True)
     print(f"✔ Trié par participant → session")
 
     print(f"\n✔ clean_data terminé | Shape : {df.shape}")
     return df
-
-
 
 
 # ──  Suppression des doublons ─────────────────────────────────────────
@@ -392,13 +415,16 @@ def remove_duplicates(df: pd.DataFrame, keep: str = "first") -> pd.DataFrame:
     print(f"Doublons exacts supprimes           : {n0 - n1} ({n0} -> {n1})")
 
     # 2. Doublons de timestamp par groupe participant/session
-    key_cols = [c for c in [COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP] if c in df.columns]
+    key_cols = [
+        c for c in [COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP] if c in df.columns
+    ]
     df = df.drop_duplicates(subset=key_cols, keep=keep).reset_index(drop=True)
     n2 = len(df)
     print(f"Doublons timestamp/groupe supprimes : {n1 - n2} ({n1} -> {n2})")
 
     print(f"\nremove_duplicates termine | Shape : {df.shape}")
     return df
+
 
 # ── Label encodé : baseline=-1 | activity=0 | fatigue=1  et Séparation X / y─────────────────────────────────────────
 def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
@@ -429,8 +455,8 @@ def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     print(df[COL_LABEL].value_counts().sort_index().to_string())
 
     # 2.2 ── Séparation X / y ─────────────────────────────────────────────
-    X = df[SIGNAL_COLS].astype(np.float32)   # float32 → STM32H7 FPU natif
-    y = df[COL_LABEL].astype(np.int8)         # int8    → économie mémoire
+    X = df[SIGNAL_COLS].astype(np.float32)  # float32 → STM32H7 FPU natif
+    y = df[COL_LABEL].astype(np.int8)  # int8    → économie mémoire
 
     print(f"\n✔ X shape : {X.shape} | dtype : {X.dtypes.unique()}")
     print(f"✔ y shape : {y.shape} | dtype : {y.dtype}")
@@ -440,9 +466,7 @@ def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
 # ──  RobustScaler (robuste aux outliers, Q1/Q3) ─────────────────────────────────────────
 def normalize_features(
-    X: pd.DataFrame,
-    scaler: RobustScaler = None,
-    fit: bool = True
+    X: pd.DataFrame, scaler: RobustScaler = None, fit: bool = True
 ) -> tuple[pd.DataFrame, RobustScaler]:
     """
     Normalise les features avec RobustScaler (robuste aux outliers, Q1/Q3) :
@@ -463,7 +487,9 @@ def normalize_features(
         print(f"✔ RobustScaler fitted et appliqué")
     else:
         if scaler is None:
-            raise ValueError("Fournir un scaler quand fit=False (ex: fold test en LOSO)")
+            raise ValueError(
+                "Fournir un scaler quand fit=False (ex: fold test en LOSO)"
+            )
         X[SIGNAL_COLS] = scaler.transform(X[SIGNAL_COLS])
         print(f"✔ RobustScaler appliqué (pré-calculé)")
 
@@ -471,9 +497,6 @@ def normalize_features(
     print(X[SIGNAL_COLS].agg(["mean", "std"]).round(3).to_string())
     print(f"\n✔ normalize_features terminé | Shape : {X.shape}")
     return X, scaler
-
-
-
 
 
 # ── Conversion float64 → float32 ─────────────────────────────────────────
@@ -491,7 +514,7 @@ def reduce_precision(df):
     df = df.copy()
 
     ram_before = df[SIGNAL_COLS].memory_usage(deep=True).sum() / 1024
-    
+
     df[SIGNAL_COLS] = df[SIGNAL_COLS].astype(np.float32)
 
     ram_after = df[SIGNAL_COLS].memory_usage(deep=True).sum() / 1024
