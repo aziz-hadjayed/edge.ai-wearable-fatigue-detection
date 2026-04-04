@@ -13,182 +13,183 @@
                 "3": {
                     "window_size": 480,
                     "step_size": 240,
-                    "epochs": 15
+                    "epochs": 50
                 },
                 "7": {
                     "window_size": 480,
                     "step_size": 240,
-                    "epochs": 15
+                    "epochs": 50
                 },
                 "11": {
                     "window_size": 480,
                     "step_size": 240,
-                    "epochs": 15
+                    "epochs": 50
                 },
                 "default": {
                     "window_size": 240,
                     "step_size": 120,
-                    "epochs": 10
+                    "epochs": 30
                 }
             }
         },
         "hyperparameters": {
             "window_size": 240,
             "step_size": 120,
-            "epochs": 10,
+            "epochs": 30,
             "batch_size": 64,
             "optuna_best_params": {
-                "batch_size": 64,
-                "n_conv_blocks": 1,
-                "kernel_size": 5,
+                "n_conv_blocks": 2,
+                "kernel_size": 3,
                 "use_batchnorm": false,
-                "dense_units": 256,
-                "dropout_rate": 0.5729400338430594,
-                "learning_rate": 0.006520023006163846,
-                "filters_0": 64
+                "dense_units": 128,
+                "dropout_rate": 0.3,
+                "learning_rate": 0.001,
+                "filters_0": 32,
+                "filters_1": 64,
+                "batch_size": 64
             }
         },
         "folds": [
             {
                 "Fold": 1,
                 "Test_Participant": 1,
-                "F1_Macro": 0.6398750445360615,
-                "F1_Weighted": 0.5944896167353795,
-                "Balanced_Accuracy": 0.7129629629629629,
+                "F1_Macro": 0.4372549019607843,
+                "F1_Weighted": 0.3279411764705882,
+                "Balanced_Accuracy": 0.5925925925925926,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 2,
                 "Test_Participant": 2,
-                "F1_Macro": 0.750445632798574,
+                "F1_Macro": 0.7335423197492164,
                 "F1_Weighted": 0.75,
                 "Balanced_Accuracy": 0.750445632798574,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 3,
                 "Test_Participant": 3,
-                "F1_Macro": 0.45075757575757575,
-                "F1_Weighted": 0.48106060606060613,
-                "Balanced_Accuracy": 0.5046296296296297,
+                "F1_Macro": 0.728849902534113,
+                "F1_Weighted": 0.7478313840155945,
+                "Balanced_Accuracy": 0.7619047619047619,
                 "Window_Size": 480,
                 "Step_Size": 240,
-                "Epochs": 15,
+                "Epochs": 50,
                 "Config_Type": "ADAPTIVE"
             },
             {
                 "Fold": 4,
                 "Test_Participant": 4,
-                "F1_Macro": 0.848385167464115,
-                "F1_Weighted": 0.8400906572651724,
-                "Balanced_Accuracy": 0.8632246376811595,
+                "F1_Macro": 0.740173744000972,
+                "F1_Weighted": 0.74621673556956,
+                "Balanced_Accuracy": 0.7222222222222222,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 5,
                 "Test_Participant": 5,
-                "F1_Macro": 0.8384566729917774,
-                "F1_Weighted": 0.8372882525444196,
-                "Balanced_Accuracy": 0.8401559454191032,
+                "F1_Macro": 1.0,
+                "F1_Weighted": 1.0,
+                "Balanced_Accuracy": 1.0,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 6,
                 "Test_Participant": 6,
-                "F1_Macro": 0.9501519756838905,
-                "F1_Weighted": 0.9489670805213538,
-                "Balanced_Accuracy": 0.9484702093397747,
+                "F1_Macro": 0.8644328143686296,
+                "F1_Weighted": 0.8607107809910186,
+                "Balanced_Accuracy": 0.8800322061191626,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 7,
                 "Test_Participant": 7,
-                "F1_Macro": 0.4786914235190098,
-                "F1_Weighted": 0.489410324423587,
-                "Balanced_Accuracy": 0.5231481481481481,
+                "F1_Macro": 0.5622710622710623,
+                "F1_Weighted": 0.5602282333051564,
+                "Balanced_Accuracy": 0.5925925925925926,
                 "Window_Size": 480,
                 "Step_Size": 240,
-                "Epochs": 15,
+                "Epochs": 50,
                 "Config_Type": "ADAPTIVE"
             },
             {
                 "Fold": 8,
                 "Test_Participant": 8,
-                "F1_Macro": 0.8536747273589379,
-                "F1_Weighted": 0.8548479936484834,
-                "Balanced_Accuracy": 0.8888888888888888,
+                "F1_Macro": 0.9232456140350878,
+                "F1_Weighted": 0.9060587515299877,
+                "Balanced_Accuracy": 0.9259259259259259,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 9,
                 "Test_Participant": 9,
-                "F1_Macro": 0.7339662882696939,
-                "F1_Weighted": 0.751601722358635,
-                "Balanced_Accuracy": 0.7596662596662597,
+                "F1_Macro": 0.8634726415594045,
+                "F1_Weighted": 0.8697101870167728,
+                "Balanced_Accuracy": 0.8703703703703703,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 10,
                 "Test_Participant": 10,
-                "F1_Macro": 0.9053312629399586,
-                "F1_Weighted": 0.9102208419599722,
+                "F1_Macro": 0.9027777777777778,
+                "F1_Weighted": 0.912962962962963,
                 "Balanced_Accuracy": 0.9259259259259259,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             },
             {
                 "Fold": 11,
                 "Test_Participant": 11,
-                "F1_Macro": 0.4852150537634408,
-                "F1_Weighted": 0.4517519466073415,
-                "Balanced_Accuracy": 0.5925925925925926,
+                "F1_Macro": 0.6652173913043479,
+                "F1_Weighted": 0.6673163418290855,
+                "Balanced_Accuracy": 0.6498316498316499,
                 "Window_Size": 480,
                 "Step_Size": 240,
-                "Epochs": 15,
+                "Epochs": 50,
                 "Config_Type": "ADAPTIVE"
             },
             {
                 "Fold": 12,
                 "Test_Participant": 12,
-                "F1_Macro": 0.6993810786914235,
-                "F1_Weighted": 0.7026117118955315,
-                "Balanced_Accuracy": 0.7129629629629629,
+                "F1_Macro": 0.8734175075638491,
+                "F1_Weighted": 0.877424689807429,
+                "Balanced_Accuracy": 0.875,
                 "Window_Size": 240,
                 "Step_Size": 120,
-                "Epochs": 10,
+                "Epochs": 30,
                 "Config_Type": "STANDARD"
             }
         ],
         "summary": {
-            "F1_Macro_mean": 0.7195276586478716,
-            "F1_Macro_std": 0.17307671032772193,
-            "F1_Weighted_mean": 0.7176950628350403,
-            "F1_Weighted_std": 0.174533911715727,
-            "Balanced_Accuracy_mean": 0.7519228163346652,
-            "Balanced_Accuracy_std": 0.15070037036394726
+            "F1_Macro_mean": 0.7745546397604369,
+            "F1_Macro_std": 0.16261421078308058,
+            "F1_Weighted_mean": 0.768866770291513,
+            "F1_Weighted_std": 0.18413602573660834,
+            "Balanced_Accuracy_mean": 0.7955703233569816,
+            "Balanced_Accuracy_std": 0.13718064405558333
         }
     }
 }

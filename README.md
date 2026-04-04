@@ -229,3 +229,26 @@ Convertit les colonnes `SIGNAL_COLS` de `float64` à `float32`.
 | Précision suffisante | ~7 chiffres significatifs, largement suffisant pour des signaux physiologiques |
 
 **Retourne :** `pd.DataFrame` avec colonnes signaux en `float32`.
+
+---
+
+## `src/models/train_loso_cnn.py` — Entraînement CNN 1D LOSO
+
+---
+
+### Contrôle du nombre d'epochs
+
+Le nombre d'epochs n'est **pas choisi par Optuna**. Il est déterminé par trois mécanismes distincts :
+
+| Mécanisme | Rôle |
+|---|---|
+| `WINDOW_CONFIGS_no_optuna` | Fixe le **maximum** d'epochs (10 ou 15 selon le participant) |
+| `EarlyStopping` | Peut **arrêter avant** ce maximum si `val_loss` ne s'améliore pas pendant 3 epochs |
+| Optuna | Ne touche **pas** aux epochs — cherche : `filters`, `kernel_size`, `dense_units`, `dropout_rate`, `learning_rate`, `batch_size` |
+
+#### Configuration adaptative par participant
+
+| Participant | Epochs max | Raison |
+|---|---|---|
+| P03, P07, P11 | **15** | Participants difficiles (F1 < 60%) — besoin de plus de contexte |
+| Tous les autres | **10** | Config standard |

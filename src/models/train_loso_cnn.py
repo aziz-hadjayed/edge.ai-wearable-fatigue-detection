@@ -30,7 +30,7 @@ from tensorflow.keras.layers import (
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.utils import to_categorical
-
+from tensorflow.keras.callbacks import EarlyStopping
 # Config
 from config import *
 
@@ -38,34 +38,9 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 # -------------------------------------------------------------------------------------------------//params
 
-# LOSO CNN ADAPTATIF - Configuration par participant
-# Participants difficiles (F1 < 60%) = fenêtre + epochs augmentés
-WINDOW_CONFIGS = {
-    3: {
-        "window_size": 480,
-        "step_size": 240,
-        "epochs": 15,
-    },  # P03: difficile (41% F1) → besoin + contexte
-    7: {
-        "window_size": 480,
-        "step_size": 240,
-        "epochs": 15,
-    },  # P07: difficile (55% F1) → besoin + contexte
-    11: {
-        "window_size": 480,
-        "step_size": 240,
-        "epochs": 15,
-    },  # P11: difficile (54% F1) → besoin + contexte
-    # Autres participants: config standard
-    "default": {"window_size": 240, "step_size": 120, "epochs": 10},
-}
 
-# Constraints from User (default)
 
-BATCH_SIZE = 64
 
-# original label mapping from src/config.py:
-# {"baseline": -1, "activity": 0, "fatigue": 1}
 
 # Categorical mapping: to use keras to_categorical, labels must be 0, 1, 2
 LABEL_MAPPING = {-1: 0, 0: 1, 1: 2}
@@ -304,39 +279,50 @@ def optimize_hyperparams(df, num_classes, n_trials=30, n_optuna_epochs=5, n_val_
         "n_val_folds": n_val_folds,
         "n_optuna_epochs": n_optuna_epochs,
     }
-    optuna_path = BASE_DIR / "reports" / "optuna_cnn_results.json"
-    optuna_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(optuna_path, "w") as f:
+    OPTUNA_PATH_CNN_D1.parent.mkdir(parents=True, exist_ok=True)
+    with open(OPTUNA_PATH_CNN_D1, "w") as f:
         json.dump(optuna_results, f, indent=4)
-    print(f"\nRésultats Optuna sauvegardés : {optuna_path}")
+    print(f"\nRésultats Optuna sauvegardés : {OPTUNA_PATH_CNN_D1}")
 
     return study.best_params
 
-
 # ______________________________________________________________________________________________//main
 def main():
+
+    print("\n" + "=" * 60)
+    print(f"TRAIN LOSO CNN")
+    print("=" * 60)
+
+    # Load dataset____________________________________________________________
     if not DATA_PROCESSED.exists():
         print(f"Dataset not found: {DATA_PROCESSED}")
         print("Please ensure `main.py` successfully generated the processed dataset.")
         return
 
-    print(f"Loading dataset from {DATA_PROCESSED}...")
+    print(f"Loading dataset from {DATA_PROCESSED}")
     df = pd.read_csv(DATA_PROCESSED)
+    # ________________________________________________________________________
 
-    # Map the labels to categorical 0, 1, 2
+    # Map the labels to categorical 0, 1, 2 et afficher les participants________
     df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
 
     participants = df[COL_PARTICIPANT].unique()
     print(f"Found {len(participants)} participants: {participants}")
+    # ________________________________________________________________________
 
     num_classes = len(LABEL_MAPPING)
     all_metrics = []
-    reports_dir = BASE_DIR / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
 
-    # --- Phase 1 : Optimisation Optuna ---
-    best_params = optimize_hyperparams(df, num_classes, n_trials=30, n_optuna_epochs=5)
+    # choisir si on veut utiliser optuna ou les hyperparamètres par défaut____
+    if USE_OPTUNA_CNN_1D:
+        best_params = optimize_hyperparams(df, num_classes, n_trials=30, n_optuna_epochs=5)
+    else:
+        best_params = MODEL_PARAMS["CNN_1D"]
+        print("\nOptuna désactivé — hyperparamètres par défaut utilisés.")
+    # ________________________________________________________________________
 
+    # LOSO cross-validation_______________________________________________________________________________
+    #_____________________________________________________________________________________________________
     for test_idx, test_part in enumerate(participants):
         print(f"\n" + "=" * 60)
         print(
@@ -397,13 +383,19 @@ def main():
         fixed_trial = optuna.trial.FixedTrial(best_params)
         model = build_cnn_1d_optuna(fixed_trial, input_shape=input_shape, num_classes=num_classes)
 
+        early_stop = EarlyStopping(
+            monitor='val_loss',
+            patience=3,
+            restore_best_weights=True)
         # Train
         print(f"Training model on {len(X_train)} samples across {EPOCHS} epochs...")
         model.fit(
             X_train,
             y_train_cat,
             epochs=EPOCHS,
-            batch_size=BATCH_SIZE,
+            validation_split=0.1,  
+            batch_size=BATCH_SIZE_CNN_1D,
+            callbacks= early_stop,
             class_weight=class_weight_dict,
             verbose=1,
         )
@@ -428,31 +420,18 @@ def main():
         report = classification_report(
             y_test,
             y_pred,
-            target_names=TARGET_NAMES[
-                : len(np.unique(np.concatenate([y_test, y_pred])))
-            ],
+            target_names=TARGET_NAMES[: len(np.unique(np.concatenate([y_test, y_pred])))],
             labels=np.unique(np.concatenate([y_test, y_pred])),
             zero_division=0,
         )
         print("\nClassification Report:\n", report)
 
-        # --- Save model ---
+        # ---------------------------- Save model ---------------------------------
         model_stem = f"{MODEL_NAME}_fold{test_idx + 1}_testP{test_part}"
-        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        save_dir = MODELS_DIR / "CNN-1D"
+        save_dir.mkdir(parents=True, exist_ok=True)
 
-        # .keras (SavedModel format)
-        tf_path = MODELS_DIR / f"{model_stem}.keras"
-        model.save(tf_path)
-        print(f"✔ Modèle TF sauvegardé   : {tf_path}")
-
-        # .tflite (float32)
-        converter = tf.lite.TFLiteConverter.from_keras_model(model)
-        tflite_model = converter.convert()
-        tflite_path = MODELS_DIR / f"{model_stem}.tflite"
-        tflite_path.write_bytes(tflite_model)
-        print(f"✔ Modèle TFLite sauvegardé       : {tflite_path}")
-
-        # .tflite INT8 — TFLite Micro (STM32 / MCU)
+        # .tflite INT8 — TFLite Micro (STM32 / MCU)________________________________
         def representative_dataset():
             sample = X_train[:200].astype(np.float32)
             for i in range(len(sample)):
@@ -461,19 +440,18 @@ def main():
         converter_micro = tf.lite.TFLiteConverter.from_keras_model(model)
         converter_micro.optimizations = [tf.lite.Optimize.DEFAULT]
         converter_micro.representative_dataset = representative_dataset
-        converter_micro.target_spec.supported_ops = [
-            tf.lite.OpsSet.TFLITE_BUILTINS_INT8
-        ]
+        converter_micro.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
         converter_micro.inference_input_type = tf.int8
         converter_micro.inference_output_type = tf.int8
         tflite_micro_model = converter_micro.convert()
 
-        tflite_micro_path = MODELS_DIR / f"{model_stem}_int8.tflite"
+        tflite_micro_path = save_dir / f"{model_stem}_int8.tflite"
         tflite_micro_path.write_bytes(tflite_micro_model)
         print(f"✔ Modèle TFLite Micro INT8 sauvegardé: {tflite_micro_path}")
+        # __________________________________________________________________________
 
-        # C array (.h) pour TFLite Micro
-        c_array_path = MODELS_DIR / f"{model_stem}_int8.h"
+        # C array (.h) pour TFLite Micro____________________________________________
+        c_array_path = save_dir / f"{model_stem}_int8.h"
         var_name = model_stem.replace("-", "_").replace(".", "_")
         hex_bytes = ", ".join(f"0x{b:02x}" for b in tflite_micro_model)
         c_header = (
@@ -488,6 +466,11 @@ def main():
         )
         c_array_path.write_text(c_header)
         print(f"✔ C array TFLite Micro sauvegardé    : {c_array_path}")
+        # __________________________________________________________________________
+
+
+
+
 
         all_metrics.append(
             {
@@ -504,8 +487,12 @@ def main():
                 else "STANDARD",
             }
         )
+    #_____________________________________________________________________________________________________
+    #_____________________________________________________________________________________________________
 
-    # --- Overall Summary ---
+
+
+    # Overall Summary terminal ___________________________________________________________
     print("\n" + "=" * 60)
     print("GLOBAL EXPERIMENT RESULTS")
     print("=" * 60)
@@ -543,8 +530,11 @@ def main():
     df_results = pd.concat(
         [df_results, pd.DataFrame([mean_row, std_row])], ignore_index=True
     )
+    print("\nSummary metrics per fold over all tests:")
+    print(df_results.tail(2).to_string(index=False))
+    # __________________________________________________________________________
 
-    # Save JSON
+    # Save JSON_________________________________________________________________
     metrics_json = {
         "model_name": MODEL_NAME,
         "training_strategy": "LOSO_ADAPTIVE",
@@ -557,7 +547,7 @@ def main():
             "window_size": WINDOW_SIZE,
             "step_size": STEP_SIZE,
             "epochs": EPOCHS,
-            "batch_size": best_params.get("batch_size", BATCH_SIZE),
+            "batch_size": best_params.get("batch_size", BATCH_SIZE_CNN_1D),
             "optuna_best_params": best_params,
         },
         "folds": [
@@ -591,9 +581,8 @@ def main():
     with open(json_path, "w") as f:
         json.dump(all_models_metrics, f, indent=4)
 
-    print("\nSummary metrics per fold over all tests:")
-    print(df_results.tail(2).to_string(index=False))
     print(f"Metrics JSON exported to    {json_path}")
+    # __________________________________________________________________________
 
 
 if __name__ == "__main__":

@@ -50,9 +50,50 @@ LABEL_MAP = {
     "fatigue":   1
 }
 
+# ------------------------------------------// Training CNN 1D
+USE_OPTUNA_CNN_1D = False   # True → recherche Optuna | False → hyperparamètres par défaut
+OPTUNA_PATH_CNN_D1    = BASE_DIR / "reports" / "optuna_cnn_results.json"
+BATCH_SIZE_CNN_1D = 64
+
+# LOSO CNN ADAPTATIF - Configuration par participant
+# Participants difficiles (F1 < 60%) = fenêtre + epochs augmentés
+WINDOW_CONFIGS = {
+    3: {
+        "window_size": 480,
+        "step_size": 240,
+        "epochs": 50,
+    },  # P03: difficile (41% F1) → besoin + contexte
+    7: {
+        "window_size": 480,
+        "step_size": 240,
+        "epochs": 50,
+    },  # P07: difficile (55% F1) → besoin + contexte
+    11: {
+        "window_size": 480,
+        "step_size": 240,
+        "epochs": 50,
+    },  # P11: difficile (54% F1) → besoin + contexte
+    # Autres participants: config standard
+    "default": {"window_size": 240, "step_size": 120, "epochs": 30},
+}
+
+
+
+
 # ------------------------------------------// Hyperparamètres
 MODEL_PARAMS = {
     "RandomForest": {"n_estimators": 100, "max_depth": 10},
     "SVM": {"kernel": "rbf", "C": 1.0},
+    "CNN_1D": {
+            "n_conv_blocks": 2,
+            "kernel_size": 3,
+            "use_batchnorm": False,
+            "dense_units": 128,
+            "dropout_rate": 0.3,
+            "learning_rate": 1e-3,
+            "filters_0": 32,
+            "filters_1": 64,
+            "batch_size": 64,
+        }
 }
 
