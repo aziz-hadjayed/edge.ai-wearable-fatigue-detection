@@ -1,5 +1,6 @@
 # ------------------------------------------// Importations
 import json
+import pandas as pd
 
 from src.config import *
 from src.data_prep import *
@@ -9,16 +10,20 @@ if __name__ == "__main__":
     print("=" * 60)
     print("CHARGEMENT DU DATASET")
     print("=" * 60)
-    # df = pd.read_csv(DATA_RAW)
-    print(f"✔ Répertoire source : {DATA_RAW}")
+    print(f"Répertoire source : {DATA_RAW}")
 
     # ── Pipeline en 3 étapes ──────────────────────────────────────────────
     df = data_clean_1(DATA_RAW)
+    
+    if df is None or df.empty:
+        print("Aucune donnée chargée.")
+        exit(1)
+
+    df = merge_demographics(df,METADATA_PATH)
     visualize_data(df)
     df = clean_data_2(df)
     X, y = encode_features(df)
-    #     X, scaler = normalize_features(X) ⚠ Pas de normalisation ici — elle est faite par fold dans les scripts LOSO
-    # pour éviter le data leakage (scaler fité sur train uniquement)
+    # X, scaler = normalize_features(X) # Pas de normalisation ici — elle est faite par fold dans les scripts LOSO pour éviter le data leakage (scaler fité sur train uniquement)
 
     # ── Sauvegarde ────────────────────────────────────────────────────────
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -37,41 +42,4 @@ if __name__ == "__main__":
     print(f"✔ Distribution label :")
     print(y.value_counts().sort_index().to_string())
 
-    print("\n" + "=" * 60)
-    print("⚠ RAPPEL LOSO — éviter le data leakage")
-    print("=" * 60)
-    print("""
-  for test_subject in participants:
-      df_train = df[df.participant != test_subject]
-      df_test  = df[df.participant == test_subject]
 
-      df_train         = clean_data(df_train)
-      X_train, y_train = encode_features(df_train)
-      X_train, scaler  = normalize_features(X_train, fit=True)
-
-      df_test          = clean_data(df_test)
-      X_test,  y_test  = encode_features(df_test)
-      X_test,  _       = normalize_features(X_test, scaler=scaler, fit=False)
-    """)
-
-    # 2. Split train/test
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
-    )
-
-    # 3. Entraîner plusieurs modèles
-    results = {}
-    for model_name, model_fn in models.items():
-        model = model_fn(MODEL_PARAMS[model_name])
-        train_model(model, X_train, y_train)
-        metrics = evaluate_model(model, X_test, y_test)
-        results[model_name] = metrics
-
-        # Sauvegarder
-        joblib.dump(model, f"{MODELS_DIR}/{model_name}.joblib")
-
-    # 4. Sauvegarder les résultats
-    with open("reports/metrics.json", "w") as f:
-        json.dump(results, f, indent=4)
-
-    print("Pipeline terminé!")

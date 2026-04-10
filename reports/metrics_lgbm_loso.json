@@ -43,7 +43,17 @@
         "breathing_rpm_std",
         "breathing_rpm_min",
         "breathing_rpm_max",
-        "breathing_rpm_median"
+        "breathing_rpm_median",
+        "age_mean",
+        "age_std",
+        "age_min",
+        "age_max",
+        "age_median",
+        "gender_mean",
+        "gender_std",
+        "gender_min",
+        "gender_max",
+        "gender_median"
     ],
     "lgbm_params": {
         "objective": "multiclass",
@@ -63,11 +73,11 @@
         "verbose": -1
     },
     "summary": {
-        "F1_Macro_mean": 0.7685816956021613,
-        "F1_Macro_std": 0.16994129348530862,
-        "F1_Weighted_mean": 0.7592283177742026,
-        "F1_Weighted_std": 0.18949743989397513,
-        "Balanced_Accuracy_mean": 0.7932072273478791,
-        "Balanced_Accuracy_std": 0.14383242538052815
+        "F1_Macro_mean": 0.760691550509334,
+        "F1_Macro_std": 0.1802451342849144,
+        "F1_Weighted_mean": 0.7497956333262712,
+        "F1_Weighted_std": 0.20179823728922847,
+        "Balanced_Accuracy_mean": 0.7876052817788283,
+        "Balanced_Accuracy_std": 0.1517898248948693
     }
 }

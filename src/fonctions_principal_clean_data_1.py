@@ -9,8 +9,10 @@ from scipy.signal import butter, filtfilt, find_peaks
 
 
 
-OUTPUT_DIR = Path("../data/02_interim")
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+# Ces variables ne sont plus utilisées directement pour sauvegarde ici — gérées dans main.py
+# mais gardées pour cohérence si besoin de debug local
+# OUTPUT_DIR = INTERIM_DIR
+# OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 PATH_BREATHING = "chest_raw_breathing.csv"
 PATH_MARKERS = "exp_markers.csv"
 
@@ -67,24 +69,27 @@ def get_label_intervals(markers_path):
                 intervals.append((active.pop(lbl), ts, lbl))
 
     if not intervals:
-        return []
+        return [], None
 
-    # 🔥 Convertir en temps relatif
+    # 🔥 Référence de début de session (absolue)
     t0 = intervals[0][0]
-    intervals = [(s - t0, e - t0, l) for s, e, l in intervals]
+    # 🔥 Convertir en temps relatif par rapport à t0
+    intervals_rel = [(s - t0, e - t0, l) for s, e, l in intervals]
 
-    print("  ℹ Intervalles (relatif):", intervals)
-    return intervals
+    print(f"  ℹ t0 référence: {t0}")
+    print("  ℹ Intervalles (relatif):", intervals_rel)
+    return intervals_rel, t0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. Resample → garder temps relatif
 # ═══════════════════════════════════════════════════════════════════════════════
-def resample_to_4hz(df, native_freq):
+def resample_to_4hz(df, native_freq, t_ref):
     df = df.copy()
 
-    # 🔥 convertir en temps relatif
-    df["timestamp"] = df["timestamp"] - df["timestamp"].iloc[0]
+    # 🔥 Synchronisation : rendre les timestamps relatifs à t_ref (absolu)
+    # AVANT resampling pour que tous les capteurs soient alignés sur le même référentiel
+    df["timestamp"] = df["timestamp"] - t_ref
 
     df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = df.set_index("datetime").drop(columns=["timestamp"])
@@ -100,8 +105,8 @@ def resample_to_4hz(df, native_freq):
     else:
         df = df.resample(period).mean()
 
-    # 🔥 retour en ms relatif
-    df["timestamp"] = (df.index - df.index[0]).total_seconds() * 1000
+    # 🔥 retour en ms relatif à t_ref (1970-01-01 00:00:00 dans datetime est notre 0 relatif)
+    df["timestamp"] = (df.index - pd.to_datetime(0, unit="ms")).total_seconds() * 1000
 
     return df.reset_index(drop=True)
 
@@ -109,11 +114,18 @@ def resample_to_4hz(df, native_freq):
 # ═══════════════════════════════════════════════════════════════════════════════
 # 3. Load + clean
 # ═══════════════════════════════════════════════════════════════════════════════
-def load_rename_resample(filepath, col_map, freq):
+def load_rename_resample(filenames, col_map, freq, t_ref):
+    """
+    filenames : Liste de un ou plusieurs fichiers (shards) pour un même capteur
+    """
     try:
-        df = pd.read_csv(filepath)
-        df.columns = df.columns.str.strip().str.lower()
-
+        all_dfs = []
+        for filepath in filenames:
+            df_part = pd.read_csv(filepath)
+            df_part.columns = df_part.columns.str.strip().str.lower()
+            all_dfs.append(df_part)
+        
+        df = pd.concat(all_dfs)
         ts_col = [c for c in df.columns if "time" in c][0]
         df = df.rename(columns={ts_col: "timestamp"})
 
@@ -124,19 +136,19 @@ def load_rename_resample(filepath, col_map, freq):
 
         df = df[list(cols.keys())].rename(columns=cols)
         df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
-        df = df.dropna().sort_values("timestamp")
+        df = df.dropna().sort_values("timestamp").drop_duplicates(subset=["timestamp"])
 
-        return resample_to_4hz(df, freq)
+        return resample_to_4hz(df, freq, t_ref)
 
     except Exception as e:
-        print("⚠ erreur:", filepath.name, e)
+        print(f"⚠ erreur sur les fichiers {filenames}: {e}")
         return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 4. Breathing RPM
 # ═══════════════════════════════════════════════════════════════════════════════
-def compute_breathing_rpm(path):
+def compute_breathing_rpm(path, t_ref):
     df = pd.read_csv(path)
     df.columns = df.columns.str.strip()
 
@@ -166,7 +178,7 @@ def compute_breathing_rpm(path):
 
     df = pd.DataFrame(rows)
 
-    return resample_to_4hz(df, 0.5)
+    return resample_to_4hz(df, 0.5, t_ref)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

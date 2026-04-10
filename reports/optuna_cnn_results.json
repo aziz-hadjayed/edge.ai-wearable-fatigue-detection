@@ -1,14 +1,15 @@
 {
-    "best_value": 0.6972921532971296,
+    "best_value": 0.7136426362256753,
     "best_params": {
-        "batch_size": 128,
-        "n_conv_blocks": 1,
-        "kernel_size": 7,
-        "use_batchnorm": false,
-        "dense_units": 128,
-        "dropout_rate": 0.30317665108606223,
-        "learning_rate": 0.002089142634385646,
-        "filters_0": 16
+        "batch_size": 64,
+        "n_conv_blocks": 2,
+        "kernel_size": 3,
+        "use_batchnorm": true,
+        "dense_units": 256,
+        "dropout_rate": 0.5329770563201687,
+        "learning_rate": 0.00026587543983272726,
+        "filters_0": 128,
+        "filters_1": 64
     },
     "n_trials": 30,
     "n_val_folds": 3,

@@ -7,17 +7,12 @@ from pathlib import Path
 from sklearn.ensemble import IsolationForest
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
+from src.config import *
 
 # Configuration des chemins
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
-try:
-    from config import DATA_PROCESSED, COL_PARTICIPANT, SIGNAL_COLS
-except ImportError:
-    DATA_PROCESSED = ROOT_DIR / "data" / "03_processed" / "dataset_final.csv"
-    COL_PARTICIPANT = 'participant'
-    SIGNAL_COLS = ["acc_x", "acc_y", "acc_z", "eda", "wrist_hr", "ibi", "temp", "breathing_rpm"]
 
 # 1. Chargement
 df_final = pd.read_csv(DATA_PROCESSED)
@@ -32,7 +27,7 @@ participant_ids = profiles.index
 X_scaled = StandardScaler().fit_transform(X)
 
 # 4. IsolationForest (Contamination 15% pour isoler ~2 sujets)
-clf = IsolationForest(random_state=42, contamination=0.2)
+clf = IsolationForest(random_state=42, contamination=0.4)
 preds = clf.fit_predict(X_scaled) 
 
 # 5. PCA à 3 composantes

@@ -13,8 +13,9 @@ RAW_DIR        = DATA_DIR / "01_raw"
 INTERIM_DIR    = DATA_DIR / "02_interim"
 PROCESSED_DIR  = DATA_DIR / "03_processed"
 
+METADATA_PATH   = RAW_DIR / "metadata.csv"
 DATA_RAW       = RAW_DIR
-DATA_PROCESSED = PROCESSED_DIR / "dataset_final.csv"
+DATA_PROCESSED = PROCESSED_DIR / "dataset_balanced.csv"
 OUTPUT_PATH    = DATA_PROCESSED
 MODELS_DIR     = BASE_DIR / "models_saved"
 
@@ -29,11 +30,13 @@ COL_SESSION     = "session"
 COL_TIMESTAMP   = "timestamp"
 COL_LABEL       = "label"
 
+
 # ------------------------------------------// visualition params
 NUM_COLS = [
     "acc_x", "acc_y", "acc_z",
     "eda", "wrist_hr", "ibi",
-    "temp", "breathing_rpm", "breathing_q"
+    "temp", "breathing_rpm", "breathing_q",
+    "age", "gender"
     ]
 
 
@@ -41,7 +44,8 @@ NUM_COLS = [
 SIGNAL_COLS = [
     "acc_x", "acc_y", "acc_z",
     "eda", "wrist_hr", "ibi",
-    "temp", "breathing_rpm"
+    "temp", "breathing_rpm",
+    "age", "gender"     # contexte démographique : aide la généralisation inter-participants
 ]
 
 LABEL_MAP = {
@@ -57,24 +61,31 @@ BATCH_SIZE_CNN_1D = 64
 
 # LOSO CNN ADAPTATIF - Configuration par participant
 # Participants difficiles (F1 < 60%) = fenêtre + epochs augmentés
+# EarlyStopping patience=3 → arrêt réel vers epoch 4-10 selon le fold
+# epochs = plafond maximum, pas le nombre réel d'epochs exécutés
 WINDOW_CONFIGS = {
     3: {
         "window_size": 480,
         "step_size": 240,
-        "epochs": 50,
-    },  # P03: difficile (41% F1) → besoin + contexte
+        "epochs": 500,
+    },  # P03: signal atypique → plus de contexte temporel
     7: {
         "window_size": 480,
         "step_size": 240,
-        "epochs": 50,
-    },  # P07: difficile (55% F1) → besoin + contexte
+        "epochs": 500,
+    },  # P07: collapse fatigue observé → fenêtre élargie
+    9: {
+        "window_size": 480,
+        "step_size": 240,
+        "epochs": 500,
+    },  # P09: fatigue profil unique (2864 samples S1) → collapse fatigue
     11: {
         "window_size": 480,
         "step_size": 240,
-        "epochs": 50,
-    },  # P11: difficile (54% F1) → besoin + contexte
+        "epochs": 500,
+    },  # P11: signal atypique → plus de contexte temporel
     # Autres participants: config standard
-    "default": {"window_size": 240, "step_size": 120, "epochs": 30},
+    "default": {"window_size": 240, "step_size": 120, "epochs": 1000},
 }
 
 
@@ -89,10 +100,10 @@ MODEL_PARAMS = {
             "kernel_size": 3,
             "use_batchnorm": False,
             "dense_units": 128,
-            "dropout_rate": 0.3,
-            "learning_rate": 1e-3,
-            "filters_0": 32,
-            "filters_1": 64,
+            "dropout_rate": 0.5,    # augmenté (0.3 to 0.5) : réduit overfitting observé
+            "learning_rate": 0.0001, # corrigé (3e-6 to 3e-4) : convergence stable
+            "filters_0": 16,
+            "filters_1": 16,
             "batch_size": 64,
         }
 }

@@ -5,6 +5,9 @@ import sys
 # Ajouter src/ au path pour trouver config.py
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")  # pas d'affichage GUI — sauvegarde fichier uniquement
+import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import pandas as pd
@@ -44,6 +47,54 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 # Categorical mapping: to use keras to_categorical, labels must be 0, 1, 2
 LABEL_MAPPING = {-1: 0, 0: 1, 1: 2}
+
+
+# ----------------------------------------------------------------------------------------------//plot
+def plot_training_curves(history, fold_idx, test_part, save_dir, f1_mac, bal_acc):
+    """
+    Génère et sauvegarde 2 graphiques pour chaque fold LOSO :
+      1. Loss      : train vs validation
+      2. Accuracy  : train vs validation
+
+    Les métriques finales (F1-Macro, Balanced Accuracy) sont annotées sur chaque graphique.
+    """
+    epochs_range = range(1, len(history.history["loss"]) + 1)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(
+        f"Fold {fold_idx} — Participant P{test_part}  |  F1-Macro: {f1_mac:.3f}  |  Bal.Acc: {bal_acc:.3f}",
+        fontsize=13, fontweight="bold"
+    )
+
+    # ── Graphique 1 : Loss ──────────────────────────────────────────────────
+    ax = axes[0]
+    ax.plot(epochs_range, history.history["loss"],     label="Train Loss",      color="#2196F3", linewidth=2)
+    ax.plot(epochs_range, history.history["val_loss"], label="Val Loss",        color="#F44336", linewidth=2, linestyle="--")
+    best_epoch = int(np.argmin(history.history["val_loss"])) + 1
+    ax.axvline(best_epoch, color="gray", linestyle=":", linewidth=1.5, label=f"Best epoch ({best_epoch})")
+    ax.set_title("Loss — Train vs Validation")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # ── Graphique 2 : Accuracy ──────────────────────────────────────────────
+    ax = axes[1]
+    ax.plot(epochs_range, history.history["accuracy"],     label="Train Accuracy", color="#4CAF50", linewidth=2)
+    ax.plot(epochs_range, history.history["val_accuracy"], label="Val Accuracy",   color="#FF9800", linewidth=2, linestyle="--")
+    ax.axvline(best_epoch, color="gray", linestyle=":", linewidth=1.5, label=f"Best epoch ({best_epoch})")
+    ax.set_title("Accuracy — Train vs Validation")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Accuracy")
+    ax.set_ylim(0, 1.05)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plot_path = save_dir / f"fold{fold_idx:02d}_P{test_part}_curves.png"
+    plt.savefig(plot_path, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+    print(f"✔ Courbes d'entraînement sauvegardées : {plot_path}")
 TARGET_NAMES = ["baseline (-1)", "activity (0)", "fatigue (1)"]
 MODEL_NAME = "CNN_1D_LOSO"
 
@@ -260,7 +311,6 @@ def optimize_hyperparams(df, num_classes, n_trials=30, n_optuna_epochs=5, n_val_
     print(f"Meilleurs hyperparamètres :")
     for k, v in study.best_params.items():
         print(f"  {k}: {v}")
-
     # Importance des hyperparamètres (dont n_conv_blocks)
     print(f"\nImportance des hyperparamètres :")
     try:
@@ -385,17 +435,17 @@ def main():
 
         early_stop = EarlyStopping(
             monitor='val_loss',
-            patience=3,
+            patience=5,
             restore_best_weights=True)
         # Train
         print(f"Training model on {len(X_train)} samples across {EPOCHS} epochs...")
-        model.fit(
+        history = model.fit(
             X_train,
             y_train_cat,
             epochs=EPOCHS,
-            validation_split=0.1,  
+            validation_split=0.1,
             batch_size=BATCH_SIZE_CNN_1D,
-            callbacks= early_stop,
+            callbacks=early_stop,
             class_weight=class_weight_dict,
             verbose=1,
         )
@@ -417,14 +467,20 @@ def main():
         print(f"F1-Weighted:       {f1_wei:.4f}")
         print(f"Balanced Accuracy: {bal_acc:.4f}")
 
+        unique_labels = np.unique(np.concatenate([y_test, y_pred]))
         report = classification_report(
             y_test,
             y_pred,
-            target_names=TARGET_NAMES[: len(np.unique(np.concatenate([y_test, y_pred])))],
-            labels=np.unique(np.concatenate([y_test, y_pred])),
+            target_names=[TARGET_NAMES[i] for i in unique_labels],
+            labels=unique_labels,
             zero_division=0,
         )
         print("\nClassification Report:\n", report)
+
+        # ---------------------------- Training curves ----------------------------
+        plots_dir = BASE_DIR / "reports" / "training_curves"
+        plots_dir.mkdir(parents=True, exist_ok=True)
+        plot_training_curves(history, test_idx + 1, test_part, plots_dir, f1_mac, bal_acc)
 
         # ---------------------------- Save model ---------------------------------
         model_stem = f"{MODEL_NAME}_fold{test_idx + 1}_testP{test_part}"

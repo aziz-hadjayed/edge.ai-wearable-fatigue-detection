@@ -70,3 +70,9 @@ le site des meteo : https://www.cl.cam.ac.uk/weather/data/daily-text/2021_MM_jj
 
 
 
+Fenêtre standard (240) : correspond à 60 secondes (1 minute) de données.
+Fenêtre augmentée (480) : correspond à 120 secondes (2 minutes) de données pour donner plus de contexte au modèle.*
+
+
+
+les heures à éviter si tu veux maximiser tes messages : 14h–20h en semaine.

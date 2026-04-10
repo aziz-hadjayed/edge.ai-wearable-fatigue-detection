@@ -25,19 +25,23 @@ def data_clean_1(path):
 
             print(f"\n {p_dir.name} | {s_dir.name}")
 
-            intervals = get_label_intervals(s_dir / PATH_MARKERS)
-            if not intervals:
+            # 🔥 Extraction des intervalles et du t0 (référence temporelle absolue de la session)
+            intervals, t0 = get_label_intervals(s_dir / PATH_MARKERS)
+            if not intervals or t0 is None:
                 continue
 
             merged = None
 
             # signals
             for f, cmap in FILE_COLS.items():
-                path = s_dir / f
-                if not path.exists():
+                # 🔥 Détection des shards (ex: wrist_acc.csv, wrist_acc_2.csv, etc.)
+                base_name = f.replace(".csv", "")
+                shards = list(s_dir.glob(f"{base_name}*.csv"))
+                
+                if not shards:
                     continue
 
-                df = load_rename_resample(path, cmap, SENSOR_FREQ[f])
+                df = load_rename_resample(shards, cmap, SENSOR_FREQ[f], t0)
                 if df is None:
                     continue
 
@@ -55,13 +59,17 @@ def data_clean_1(path):
             # breathing
             b_path = s_dir / PATH_BREATHING
             if b_path.exists():
-                df_b = compute_breathing_rpm(b_path)
-                merged = pd.merge_asof(
-                    merged.sort_values(COL_TIMESTAMP),
-                    df_b.sort_values(COL_TIMESTAMP),
-                    on=COL_TIMESTAMP,
-                    tolerance=TARGET_PERIOD,
-                    direction="nearest",
+                df_b = compute_breathing_rpm(b_path, t0)
+                merged = (
+                    df_b
+                    if merged is None
+                    else pd.merge_asof(
+                        merged.sort_values(COL_TIMESTAMP),
+                        df_b.sort_values(COL_TIMESTAMP),
+                        on=COL_TIMESTAMP,
+                        tolerance=TARGET_PERIOD,
+                        direction="nearest",
+                    )
                 )
 
             if merged is None:
@@ -97,6 +105,30 @@ def data_clean_1(path):
 
     else:
         print("\n Toujours aucune donnée (vérifier timestamps)")
+
+
+# ── Fusion des données démographiques (age, gender) depuis metadata.csv ─────────────────────────────────────────
+def merge_demographics(df: pd.DataFrame, metadata_path=None) -> pd.DataFrame:
+    """
+    Fusionne les colonnes 'age' et 'gender' depuis metadata.csv dans le dataset.
+      - Lecture de metadata.csv (colonnes: participant_id, age, gender, ...)
+      - Jointure sur la colonne 'participant'
+      - Mapping : 'Female' -> 0, 'Male' -> 1
+    Retourne : DataFrame avec colonnes 'age' (int) et 'gender' (0/1) ajoutées.
+    """
+    meta = pd.read_csv(metadata_path, dtype={"participant_id": str})
+    
+    # Mapping Female -> 0, Male -> 1
+    meta["gender"] = meta["gender"].map({"Female": 0, "Male": 1})
+    
+    meta = meta.rename(columns={"participant_id": COL_PARTICIPANT})[
+        [COL_PARTICIPANT, "age", "gender"]
+    ]
+
+    df = df.merge(meta, on=COL_PARTICIPANT, how="left")
+
+    print(f"✔ Démographiques fusionnés | age/gender (encoded) ajoutés pour {meta.shape[0]} participants")
+    return df
 
 
 # ── visualition des données trouvé de data_clean_1 ─────────────────────────────────────────
