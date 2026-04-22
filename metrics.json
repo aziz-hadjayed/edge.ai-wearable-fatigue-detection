@@ -1,200 +1,1094 @@
 {
-    "CNN_1D_LOSO": {
-        "model_name": "CNN_1D_LOSO",
-        "training_strategy": "LOSO_ADAPTIVE",
-        "adaptive_config": {
-            "description": "Participants difficiles re\u00e7oivent fen\u00eatres + epochs augment\u00e9s",
-            "difficult_participants": [
-                3,
-                7,
-                11
-            ],
-            "configs": {
-                "3": {
-                    "window_size": 480,
-                    "step_size": 240,
-                    "epochs": 500
-                },
-                "7": {
-                    "window_size": 480,
-                    "step_size": 240,
-                    "epochs": 500
-                },
-                "9": {
-                    "window_size": 480,
-                    "step_size": 240,
-                    "epochs": 500
-                },
-                "11": {
-                    "window_size": 480,
-                    "step_size": 240,
-                    "epochs": 500
-                },
-                "default": {
-                    "window_size": 240,
-                    "step_size": 120,
-                    "epochs": 1000
-                }
-            }
-        },
-        "hyperparameters": {
-            "window_size": 240,
-            "step_size": 120,
-            "epochs": 1000,
-            "batch_size": 64,
-            "optuna_best_params": {
-                "n_conv_blocks": 2,
-                "kernel_size": 3,
-                "use_batchnorm": false,
-                "dense_units": 128,
-                "dropout_rate": 0.5,
-                "learning_rate": 0.0001,
-                "filters_0": 16,
-                "filters_1": 16,
-                "batch_size": 64
-            }
+    "CNN_TCN_LOSO": {
+        "mean_f1": 0.7190018193238493,
+        "std_f1": 0.2883028036270483,
+        "mean_bal_acc": 0.7698793490460156,
+        "std_bal_acc": 0.2321017249055318,
+        "params": {
+            "batch_size": 32,
+            "cnn_filters": 64,
+            "cnn_kernel": 5,
+            "n_tcn_blocks": 3,
+            "tcn_filters": 64,
+            "tcn_kernel": 5,
+            "activation": "relu",
+            "l2_reg": 1.0407988654029368e-05,
+            "optimizer": "rmsprop",
+            "dense_units": 64,
+            "dropout_rate": 0.30275665469524965,
+            "learning_rate": 0.0003734774908783387
         },
         "folds": [
             {
                 "Fold": 1,
-                "Test_Participant": 1,
-                "F1_Macro": 0.4216216216216216,
-                "F1_Weighted": 0.32972972972972975,
-                "Balanced_Accuracy": 0.5462962962962963,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.48148148148148145,
+                "Balanced_Accuracy": 0.6666666666666666
             },
             {
                 "Fold": 2,
-                "Test_Participant": 2,
-                "F1_Macro": 0.6569023569023568,
-                "F1_Weighted": 0.6573553719008265,
-                "Balanced_Accuracy": 0.6705653021442495,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.4769433465085639,
+                "Balanced_Accuracy": 0.6111111111111112
             },
             {
                 "Fold": 3,
-                "Test_Participant": 3,
-                "F1_Macro": 0.7488344988344989,
-                "F1_Weighted": 0.7497814685314684,
-                "Balanced_Accuracy": 0.7321428571428571,
-                "Window_Size": 480,
-                "Step_Size": 240,
-                "Epochs": 500,
-                "Config_Type": "ADAPTIVE"
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 0.919047619047619,
+                "Balanced_Accuracy": 0.9393939393939394
             },
             {
                 "Fold": 4,
-                "Test_Participant": 4,
-                "F1_Macro": 0.6859796550199028,
-                "F1_Weighted": 0.6922181615028283,
-                "Balanced_Accuracy": 0.6872987117552336,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.4646464646464647,
+                "Balanced_Accuracy": 0.5
             },
             {
                 "Fold": 5,
-                "Test_Participant": 5,
-                "F1_Macro": 0.7552343040715135,
-                "F1_Weighted": 0.7575704245471687,
-                "Balanced_Accuracy": 0.7592592592592592,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
             },
             {
                 "Fold": 6,
-                "Test_Participant": 6,
-                "F1_Macro": 0.7833333333333332,
-                "F1_Weighted": 0.7750605326876513,
-                "Balanced_Accuracy": 0.8035426731078905,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.5416666666666666,
+                "Balanced_Accuracy": 0.6666666666666666
             },
             {
                 "Fold": 7,
-                "Test_Participant": 7,
-                "F1_Macro": 0.4220032840722496,
-                "F1_Weighted": 0.41701402046229635,
-                "Balanced_Accuracy": 0.5185185185185185,
-                "Window_Size": 480,
-                "Step_Size": 240,
-                "Epochs": 500,
-                "Config_Type": "ADAPTIVE"
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.13333333333333333,
+                "Balanced_Accuracy": 0.3333333333333333
             },
             {
                 "Fold": 8,
-                "Test_Participant": 8,
-                "F1_Macro": 0.6122923588039867,
-                "F1_Weighted": 0.6576296067372326,
-                "Balanced_Accuracy": 0.5999455337690632,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
             },
             {
                 "Fold": 9,
-                "Test_Participant": 9,
-                "F1_Macro": 0.34848484848484845,
-                "F1_Weighted": 0.30244755244755245,
-                "Balanced_Accuracy": 0.4583333333333333,
-                "Window_Size": 480,
-                "Step_Size": 240,
-                "Epochs": 500,
-                "Config_Type": "ADAPTIVE"
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.13333333333333333,
+                "Balanced_Accuracy": 0.3333333333333333
             },
             {
                 "Fold": 10,
-                "Test_Participant": 10,
-                "F1_Macro": 0.7841269841269841,
-                "F1_Weighted": 0.7923809523809524,
-                "Balanced_Accuracy": 0.8333333333333334,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.7241830065359478,
+                "Balanced_Accuracy": 0.7929292929292929
             },
             {
                 "Fold": 11,
-                "Test_Participant": 11,
-                "F1_Macro": 0.7327300150829563,
-                "F1_Weighted": 0.7308784521766266,
-                "Balanced_Accuracy": 0.7373737373737373,
-                "Window_Size": 480,
-                "Step_Size": 240,
-                "Epochs": 500,
-                "Config_Type": "ADAPTIVE"
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.543859649122807,
+                "Balanced_Accuracy": 0.6666666666666666
             },
             {
                 "Fold": 12,
-                "Test_Participant": 12,
-                "F1_Macro": 0.7071201814058957,
-                "F1_Weighted": 0.7066248037676609,
-                "Balanced_Accuracy": 0.7060185185185185,
-                "Window_Size": 240,
-                "Step_Size": 120,
-                "Epochs": 1000,
-                "Config_Type": "STANDARD"
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.8745098039215686,
+                "Balanced_Accuracy": 0.9
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 0.9474747474747476,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.24242424242424243,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.7307692307692308,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.717948717948718,
+                "Balanced_Accuracy": 0.75
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6757575757575758,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.6,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.5523809523809523,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.15384615384615385,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.34848484848484845,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.7592592592592592,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.31746031746031744,
+                "Balanced_Accuracy": 0.3888888888888889
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
             }
-        ],
-        "summary": {
-            "F1_Macro_mean": 0.6382219534800123,
-            "F1_Macro_std": 0.15458662226376305,
-            "F1_Weighted_mean": 0.6307242564059995,
-            "F1_Weighted_std": 0.17639628760957762,
-            "Balanced_Accuracy_mean": 0.6710523395460242,
-            "Balanced_Accuracy_std": 0.11693932190014494
-        }
+        ]
+    },
+    "CNN_1D_LOSO": {
+        "mean_f1": 0.7817524378626889,
+        "std_f1": 0.23147203746900888,
+        "mean_bal_acc": 0.8158249158249159,
+        "std_bal_acc": 0.19823741962732158,
+        "params": {
+            "batch_size": 32,
+            "n_conv_blocks": 2,
+            "kernel_size": 5,
+            "filters": 128,
+            "use_batchnorm": false,
+            "activation": "relu",
+            "pool_size": 3,
+            "global_pooling": "flatten",
+            "l2_reg": 0.0004677279199169856,
+            "optimizer": "rmsprop",
+            "dense_units": 256,
+            "dropout_rate": 0.36790290255054414,
+            "learning_rate": 0.00015679008763782025
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.6136363636363636,
+                "Balanced_Accuracy": 0.6
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.3878787878787879,
+                "Balanced_Accuracy": 0.35555555555555557
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.5428571428571428,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.5686274509803922,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.5238095238095238,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.43333333333333335,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.8871572871572871,
+                "Balanced_Accuracy": 0.9141414141414143
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.543859649122807,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.9393939393939394,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.4857142857142857,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.5238095238095238,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.8777777777777778,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.9090909090909091,
+                "Balanced_Accuracy": 0.9166666666666667
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6555555555555556,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.4444444444444444,
+                "Balanced_Accuracy": 0.5833333333333334
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.7666666666666666,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.5333333333333333,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.34848484848484845,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.7592592592592592,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.5686274509803922,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "TCN_LOSO": {
+        "mean_f1": 0.676563438716575,
+        "std_f1": 0.2568665313733847,
+        "mean_bal_acc": 0.7374959916626582,
+        "std_bal_acc": 0.2053678183645629,
+        "params": {
+            "batch_size": 64,
+            "n_tcn_blocks": 4,
+            "tcn_filters": 64,
+            "tcn_kernel": 5,
+            "activation": "relu",
+            "l2_reg": 0.0001,
+            "optimizer": "adam",
+            "dense_units": 64,
+            "dropout_rate": 0.3,
+            "learning_rate": 0.0005
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.5506172839506173,
+                "Balanced_Accuracy": 0.5444444444444444
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.43001443001443,
+                "Balanced_Accuracy": 0.5
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.5616605616605617,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.5686274509803922,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.41269841269841273,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 0.8412698412698413,
+                "Balanced_Accuracy": 0.8333333333333334
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.1818181818181818,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.947089947089947,
+                "Balanced_Accuracy": 0.9696969696969697
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.553306342780027,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.6396825396825397,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.2619047619047619,
+                "Balanced_Accuracy": 0.3888888888888889
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.5151515151515151,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 0.9474747474747476,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.5079365079365079,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.4666666666666666,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.4523809523809524,
+                "Balanced_Accuracy": 0.5833333333333334
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.6071428571428572,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.4646464646464647,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.4444444444444444,
+                "Balanced_Accuracy": 0.5833333333333334
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.5299145299145299,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.6757575757575758,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.6,
+                "Balanced_Accuracy": 0.6388888888888888
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.16666666666666666,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.9487179487179488,
+                "Balanced_Accuracy": 0.9523809523809524
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.5686274509803922,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 0.7965811965811967,
+                "Balanced_Accuracy": 0.8333333333333334
+            }
+        ]
+    },
+    "LGBM_LOSO": {
+        "mean_f1": 0.8250074272928589,
+        "std_f1": 0.17752845043610455,
+        "mean_bal_acc": 0.848045267489712,
+        "std_bal_acc": 0.14883761760880546,
+        "params": {
+            "n_estimators": 113,
+            "learning_rate": 0.04230441275950031,
+            "num_leaves": 65,
+            "max_depth": 15,
+            "min_child_samples": 16,
+            "subsample": 0.9599864108985356,
+            "colsample_bytree": 0.6738167152482913,
+            "reg_alpha": 0.04566190143949176,
+            "reg_lambda": 0.5002488288570663
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.48148148148148145,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.4562091503267974,
+                "Balanced_Accuracy": 0.4777777777777778
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.6888888888888888,
+                "Balanced_Accuracy": 0.6944444444444443
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.6944444444444445,
+                "Balanced_Accuracy": 0.7333333333333334
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.7380952380952381,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.9393939393939394,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.841025641025641,
+                "Balanced_Accuracy": 0.8412698412698413
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559442,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.9568151147098516,
+                "Balanced_Accuracy": 0.9666666666666667
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.5555555555555555,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.6649350649350649,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.762962962962963,
+                "Balanced_Accuracy": 0.7666666666666666
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.717948717948718,
+                "Balanced_Accuracy": 0.75
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.9076923076923077,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6952380952380951,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.5396825396825397,
+                "Balanced_Accuracy": 0.6296296296296297
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.7746031746031745,
+                "Balanced_Accuracy": 0.7857142857142857
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.6507936507936507,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.6807081807081808,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.6046176046176045,
+                "Balanced_Accuracy": 0.6777777777777779
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.6253411306042885,
+                "Balanced_Accuracy": 0.6507936507936507
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.8916666666666666,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
     }
 }

@@ -1,0 +1,52 @@
+Problème principal : Haute variance inter-participants (LOSO)
+=============================================================
+
+Les résultats montrent un écart-type élevé sur le F1-Macro (std ≈ 0.18–0.29)
+pour tous les modèles. Cela signifie que les performances varient fortement
+d'un participant à l'autre.
+
+Participants "faciles" (F1 ≈ 1.0) :
+  - P5, P10 → profil physiologique standard, bien représenté dans les données.
+
+Participants "difficiles" (F1 < 0.5) :
+  - P3 S1/S3 → F1 aussi bas que 0.13, signal atypique.
+  - P11      → consistamment faible (0.15–0.67), profil unique mal appris.
+  - P1 S2    → F1 ≈ 0.39–0.48, session problématique.
+
+Causes :
+  1. Seulement 12 participants → certains profils physiologiques sont uniques.
+     En LOSO, quand ce participant est en test, le modèle n'a jamais vu
+     de profil similaire → il échoue.
+  2. Certaines sessions ont très peu de fenêtres (16–19 fenêtres), ce qui
+     rend l'évaluation bruitée et peu fiable statistiquement.
+  3. Les participants atypiques (P3, P7, P9, P11) ont des WINDOW_CONFIGS
+     spéciaux dans config.py (fenêtre élargie 480), mais cela ne suffit
+     pas toujours à compenser la variabilité de leurs signaux.
+
+-------------------------------------------------------------
+
+Problème spécial : Incompatibilité CuDNN LSTM → TFLite
+=============================================================
+
+Les couches sans problème CuDNN :
+- Conv1D → Il n'existe qu'une seule implémentation de la convolution 1D. Que ce soit sur GPU ou CPU, c'est la même opération mathématique (produit de convolution). TFLite la supporte nativement.
+- Dense, Dropout, BatchNorm, MaxPool, GAP → Même chose : opérations simples, une seule implémentation universelle.
+
+Pourquoi LSTM est spécial :
+Le LSTM a deux implémentations internes complètement différentes :
+
+| Caractéristique | CPU | GPU (NVIDIA) |
+| :--- | :--- | :--- |
+| Implémentation | Boucle séquentielle en Python/C++ | CuDNN (CudnnRNNV3) |
+| Comment ça marche | Calcule chaque timestep un par un | Calcule tous les timesteps en parallèle dans un seul kernel CUDA optimisé |
+| Vitesse | Lent (séquentiel) | ~10× plus rapide |
+| Compatible TFLite | ✅ Oui | ❌ Non |
+
+Quand TensorFlow détecte un GPU NVIDIA, il remplace automatiquement ta couche LSTM(64) par l'opération GPU CudnnRNNV3. C'est un raccourci matériel NVIDIA propriétaire — il n'existe pas sur les microcontrôleurs.
+
+En résumé :
+- Conv1D → 1 seule implémentation → GPU/CPU/TFLite : ✅ OK partout
+- LSTM → 2 implémentations → GPU: CudnnRNNV3 (propriétaire NVIDIA) / CPU: UnifiedLSTM (portable)
+  → TFLite ne comprend QUE la version CPU
+
+C'est pour ça que CNN, TCN, CNN-TCN n'ont jamais eu ce problème (ils n'utilisent que des Conv1D), et que seuls LSTM et CNN-LSTM nécessitent le clone CPU avant export TFLite.

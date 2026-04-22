@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Read(//usr/bin/**)",
+      "Read(//home/aziz/.local/bin/**)",
+      "Bash(pip3 show:*)"
+    ]
+  }
+}
