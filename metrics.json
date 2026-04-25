@@ -820,7 +820,7 @@
             }
         ]
     },
-    "LGBM_LOSO": {
+    "LGBM1": {
         "mean_f1": 0.8250074272928589,
         "std_f1": 0.17752845043610455,
         "mean_bal_acc": 0.848045267489712,
@@ -1088,6 +1088,1642 @@
                 "Session": 3,
                 "F1_Macro": 1.0,
                 "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "LGBM2": {
+        "mean_f1": 0.8361162666309725,
+        "std_f1": 0.17109646237157103,
+        "mean_bal_acc": 0.8569958847736626,
+        "std_bal_acc": 0.1445961516255864,
+        "params": {
+            "n_estimators": 325,
+            "learning_rate": 0.23231675107123476,
+            "num_leaves": 72,
+            "max_depth": -1,
+            "min_child_samples": 50,
+            "subsample": 0.5010175901127049,
+            "colsample_bytree": 0.9253989700141422,
+            "reg_alpha": 0.07076378159140724,
+            "reg_lambda": 0.01215497183041375
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.48148148148148145,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.4562091503267974,
+                "Balanced_Accuracy": 0.4777777777777778
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.7666666666666666,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.6944444444444445,
+                "Balanced_Accuracy": 0.7333333333333334
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.6507936507936508,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.841025641025641,
+                "Balanced_Accuracy": 0.8412698412698413
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559442,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.75,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.6649350649350649,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.8244348244348244,
+                "Balanced_Accuracy": 0.8222222222222223
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.8166666666666667,
+                "Balanced_Accuracy": 0.8333333333333333
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.9220779220779222,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6952380952380951,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.5396825396825397,
+                "Balanced_Accuracy": 0.6296296296296297
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.748868778280543,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.6507936507936507,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.7777777777777778,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.6571428571428571,
+                "Balanced_Accuracy": 0.6888888888888888
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.5499999999999999,
+                "Balanced_Accuracy": 0.6031746031746031
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.8916666666666666,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "LGBM3": {
+        "mean_f1": 0.8361162666309725,
+        "std_f1": 0.17109646237157103,
+        "mean_bal_acc": 0.8569958847736626,
+        "std_bal_acc": 0.1445961516255864,
+        "params": {
+            "n_estimators": 325,
+            "learning_rate": 0.23231675107123476,
+            "num_leaves": 72,
+            "max_depth": -1,
+            "min_child_samples": 50,
+            "subsample": 0.5010175901127049,
+            "colsample_bytree": 0.9253989700141422,
+            "reg_alpha": 0.07076378159140724,
+            "reg_lambda": 0.01215497183041375
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.48148148148148145,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.4562091503267974,
+                "Balanced_Accuracy": 0.4777777777777778
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.7666666666666666,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.6944444444444445,
+                "Balanced_Accuracy": 0.7333333333333334
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.6507936507936508,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.841025641025641,
+                "Balanced_Accuracy": 0.8412698412698413
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559442,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.75,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.6649350649350649,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.8244348244348244,
+                "Balanced_Accuracy": 0.8222222222222223
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.8166666666666667,
+                "Balanced_Accuracy": 0.8333333333333333
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.9220779220779222,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6952380952380951,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.5396825396825397,
+                "Balanced_Accuracy": 0.6296296296296297
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.748868778280543,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.6507936507936507,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.7777777777777778,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.6571428571428571,
+                "Balanced_Accuracy": 0.6888888888888888
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.5499999999999999,
+                "Balanced_Accuracy": 0.6031746031746031
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.8916666666666666,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "CNN_LSTM": {
+        "mean_f1": 0.6856399539951984,
+        "std_f1": 0.251424365432244,
+        "mean_bal_acc": 0.7271564854898188,
+        "std_bal_acc": 0.217216645053868,
+        "params": {
+            "batch_size": 32,
+            "cnn_filters": 64,
+            "cnn_kernel": 5,
+            "n_conv_blocks": 2,
+            "pool_size": 2,
+            "lstm_units": 64,
+            "bidirectional": false,
+            "activation": "relu",
+            "l2_reg": 0.0001,
+            "optimizer": "adam",
+            "dense_units": 64,
+            "dropout_rate": 0.3,
+            "learning_rate": 0.0005
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.4233201581027668,
+                "Balanced_Accuracy": 0.39999999999999997
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.32492997198879553,
+                "Balanced_Accuracy": 0.3888888888888889
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.39057239057239057,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 0.8857142857142858,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.7904761904761904,
+                "Balanced_Accuracy": 0.7999999999999999
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.3148148148148148,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 0.8412698412698413,
+                "Balanced_Accuracy": 0.8333333333333334
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.2222222222222222,
+                "Balanced_Accuracy": 0.2222222222222222
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.8871572871572871,
+                "Balanced_Accuracy": 0.9141414141414143
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.503030303030303,
+                "Balanced_Accuracy": 0.6111111111111112
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.7799145299145298,
+                "Balanced_Accuracy": 0.7857142857142857
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.8885003885003885,
+                "Balanced_Accuracy": 0.888888888888889
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 0.6741854636591479,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.7555555555555555,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.7746031746031746,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.4000000000000001,
+                "Balanced_Accuracy": 0.5
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.6507936507936507,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.8166666666666667,
+                "Balanced_Accuracy": 0.8333333333333333
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.4444444444444445,
+                "Balanced_Accuracy": 0.6111111111111112
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.7851851851851852,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.5185185185185185,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.5357142857142857,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 0.9090909090909091,
+                "Balanced_Accuracy": 0.9166666666666667
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 0.8838383838383838,
+                "Balanced_Accuracy": 0.888888888888889
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.4646464646464647,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.8023809523809523,
+                "Balanced_Accuracy": 0.8055555555555555
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.16666666666666666,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.553306342780027,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.40740740740740744,
+                "Balanced_Accuracy": 0.4444444444444445
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "TCN": {
+        "mean_f1": 0.7172980926302182,
+        "std_f1": 0.2647488342659938,
+        "mean_bal_acc": 0.7754629629629629,
+        "std_bal_acc": 0.20620607062501878,
+        "params": {
+            "batch_size": 32,
+            "n_tcn_blocks": 3,
+            "tcn_filters": 64,
+            "tcn_kernel": 5,
+            "activation": "leaky_relu",
+            "l2_reg": 0.0006379184058649745,
+            "optimizer": "adam",
+            "dense_units": 128,
+            "dropout_rate": 0.24365524869541297,
+            "learning_rate": 0.0004148672008962955
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.6507936507936508,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.5151515151515151,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 0.9552042160737813,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.5349143610013175,
+                "Balanced_Accuracy": 0.6111111111111112
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.5238095238095238,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.3148148148148148,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.8916666666666666,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.75,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.5555555555555555,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.41269841269841273,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.5555555555555555,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.4074074074074074,
+                "Balanced_Accuracy": 0.5
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.5299145299145299,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.6071428571428572,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.602930402930403,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.16666666666666666,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.4166666666666667,
+                "Balanced_Accuracy": 0.5833333333333334
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.8777777777777778,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.4646464646464647,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.7486772486772487,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.16666666666666666,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.5252525252525252,
+                "Balanced_Accuracy": 0.6111111111111112
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.8773892773892774,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "LSTM": {
+        "mean_f1": 0.780090736544985,
+        "std_f1": 0.21681200223064698,
+        "mean_bal_acc": 0.8112614237614237,
+        "std_bal_acc": 0.18669089373680597,
+        "params": {
+            "n_lstm_layers": 1,
+            "lstm_units": 128,
+            "bidirectional": true,
+            "dense_units": 32,
+            "dropout_rate": 0.3223855899459306,
+            "l2_reg": 0.009928048379348684,
+            "learning_rate": 0.00044691892803364514,
+            "batch_size": 32
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.4259259259259259,
+                "Balanced_Accuracy": 0.6111111111111112
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.49206349206349204,
+                "Balanced_Accuracy": 0.5333333333333333
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.6825396825396824,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.7380952380952381,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 0.5555555555555555,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.8412698412698413,
+                "Balanced_Accuracy": 0.8333333333333334
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.947089947089947,
+                "Balanced_Accuracy": 0.9696969696969697
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.8222222222222223,
+                "Balanced_Accuracy": 0.8333333333333334
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.5555555555555555,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.9153439153439153,
+                "Balanced_Accuracy": 0.9333333333333332
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.6238095238095238,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.5757575757575758,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.6071428571428572,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.7000000000000001,
+                "Balanced_Accuracy": 0.7777777777777777
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6757575757575758,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.2222222222222222,
+                "Balanced_Accuracy": 0.25
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 0.717948717948718,
+                "Balanced_Accuracy": 0.75
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.5757575757575758,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.9047619047619048,
+                "Balanced_Accuracy": 0.9166666666666666
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.34848484848484845,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.8968253968253969,
+                "Balanced_Accuracy": 0.8968253968253969
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.5971988795518207,
+                "Balanced_Accuracy": 0.6222222222222221
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            }
+        ]
+    },
+    "LGBM": {
+        "mean_f1": 0.827238562139233,
+        "std_f1": 0.1684617573216684,
+        "mean_bal_acc": 0.8491365373309817,
+        "std_bal_acc": 0.13997768343832986,
+        "params": {
+            "objective": "multiclass",
+            "num_class": 3,
+            "metric": "multi_logloss",
+            "n_estimators": 500,
+            "learning_rate": 0.005,
+            "num_leaves": 63,
+            "max_depth": -1,
+            "min_child_samples": 20,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "reg_alpha": 0.1,
+            "reg_lambda": 0.1,
+            "n_jobs": -1,
+            "random_state": 42,
+            "verbose": -1
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.4615384615384615,
+                "Balanced_Accuracy": 0.6111111111111112
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.5398692810457516,
+                "Balanced_Accuracy": 0.5444444444444444
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.6888888888888888,
+                "Balanced_Accuracy": 0.6944444444444443
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.6944444444444445,
+                "Balanced_Accuracy": 0.7333333333333334
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.8119658119658121,
+                "Balanced_Accuracy": 0.8333333333333334
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.8857142857142857,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.9440559440559442,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.9568151147098516,
+                "Balanced_Accuracy": 0.9666666666666667
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.5555555555555555,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.8998556998556998,
+                "Balanced_Accuracy": 0.9027777777777778
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.556998556998557,
+                "Balanced_Accuracy": 0.6666666666666666
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.762962962962963,
+                "Balanced_Accuracy": 0.7666666666666666
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.717948717948718,
+                "Balanced_Accuracy": 0.75
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.8333333333333334,
+                "Balanced_Accuracy": 0.8333333333333334
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.6952380952380951,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.5396825396825397,
+                "Balanced_Accuracy": 0.6296296296296297
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.7746031746031745,
+                "Balanced_Accuracy": 0.7857142857142857
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.6507936507936507,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.6807081807081808,
+                "Balanced_Accuracy": 0.7222222222222223
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.788324420677362,
+                "Balanced_Accuracy": 0.8111111111111112
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.6734006734006733,
+                "Balanced_Accuracy": 0.7063492063492064
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.8916666666666666,
+                "Balanced_Accuracy": 0.8888888888888888
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 1.0,
+                "Balanced_Accuracy": 1.0
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 0.9440559440559441,
+                "Balanced_Accuracy": 0.9444444444444445
             }
         ]
     }

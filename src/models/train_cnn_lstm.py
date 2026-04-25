@@ -44,7 +44,7 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
 from tensorflow.keras.layers import (
     BatchNormalization, Bidirectional, Conv1D, Dense, Dropout,
-    GlobalAveragePooling1D, Input, LSTM, MaxPooling1D,
+    Input, LSTM, MaxPooling1D,
 )
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, RMSprop
@@ -57,11 +57,13 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # ══════════════════════════════════════════════════════════════════════
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
-MODEL_NAME        = "CNN_LSTM_LOSO"
+MODEL_NAME        = "CNN_LSTM"
 LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
 TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
 USE_SMOTE         = True    # rééquilibrage SMOTE sur X_fit uniquement
-N_OPTUNA_SESSIONS = 11      # sessions tirées au hasard pour évaluer chaque trial Optuna
+N_OPTUNA_SESSIONS = 20      # sessions tirées au hasard pour évaluer chaque trial Optuna
+N_OPTUNA_TRIALS   = 50      # nombre de trials Optuna
+N_OPTUNA_EPOCHS   = 10      # nombre d'époques par trial Optuna
 
 # Budget Flash STM32 pour TFLite INT8
 EDGE_FLASH_BUDGET_KB = STM32_FLASH_KB
@@ -109,9 +111,49 @@ def _export_c_array(tflite_bytes, h_path, stem):
     ]
     h_path.write_text("\n".join(lines))
 
-def _save_tflite_int8(model, X_representative, models_dir, stem):
-    import tempfile
+def _silent_tflite_convert(converter):
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
+    try:
+        os.dup2(devnull_fd, 1)
+        os.dup2(devnull_fd, 2)
+        return converter.convert()
+    finally:
+        os.dup2(saved_stdout, 1)
+        os.dup2(saved_stderr, 2)
+        os.close(saved_stdout)
+        os.close(saved_stderr)
+        os.close(devnull_fd)
 
+def _clone_model_for_tflite(model):
+    def clone_layer(layer):
+        if isinstance(layer, LSTM):
+            config = layer.get_config()
+            config["use_cudnn"] = False
+            config["unroll"] = True
+            return LSTM.from_config(config)
+
+        if isinstance(layer, Bidirectional):
+            config = layer.get_config()
+            for key in ("layer", "forward_layer", "backward_layer"):
+                inner = config.get(key)
+                if isinstance(inner, dict) and inner.get("class_name") == "LSTM":
+                    inner_config = dict(inner.get("config", {}))
+                    inner_config["use_cudnn"] = False
+                    inner_config["unroll"] = True
+                    config[key] = {**inner, "config": inner_config}
+            return Bidirectional.from_config(config)
+
+        return layer.__class__.from_config(layer.get_config())
+
+    with tf.device("/cpu:0"):
+        cpu_model = tf.keras.models.clone_model(model, clone_function=clone_layer)
+        cpu_model.build(model.input_shape)
+        cpu_model.set_weights(model.get_weights())
+    return cpu_model
+
+def _save_tflite_int8(model, X_representative, models_dir, stem):
     def representative_dataset():
         idx = np.random.default_rng(42).choice(
             len(X_representative), min(200, len(X_representative)), replace=False
@@ -119,13 +161,9 @@ def _save_tflite_int8(model, X_representative, models_dir, stem):
         for i in idx:
             yield [X_representative[i:i+1].astype(np.float32)]
 
-    # Cloner le modèle sur CPU pour éviter les ops CuDNN (LSTM)
-    # qui ne sont pas supportées par TFLite
-    weights = model.get_weights()
-    with tf.device('/cpu:0'):
-        cpu_model = tf.keras.models.clone_model(model)
-        cpu_model.build(model.input_shape)
-        cpu_model.set_weights(weights)
+    # Recréer les couches LSTM en mode non-CuDNN pour forcer
+    # un graphe TFLite portable, même si l'entraînement a eu lieu sur GPU.
+    cpu_model = _clone_model_for_tflite(model)
 
     converter = tf.lite.TFLiteConverter.from_keras_model(cpu_model)
     converter.optimizations              = [tf.lite.Optimize.DEFAULT]
@@ -133,7 +171,7 @@ def _save_tflite_int8(model, X_representative, models_dir, stem):
     converter.target_spec.supported_ops  = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
     converter.inference_input_type       = tf.int8
     converter.inference_output_type      = tf.int8
-    tflite_bytes = converter.convert()
+    tflite_bytes = _silent_tflite_convert(converter)
 
     tflite_path = models_dir / f"{stem}_int8.tflite"
     tflite_path.write_bytes(tflite_bytes)
@@ -301,7 +339,7 @@ def build_model(trial, input_shape, num_classes):
                   metrics=["accuracy"], jit_compile=False)
     return model
 
-def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=5):
+def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=N_OPTUNA_EPOCHS):
     config      = WINDOW_CONFIGS["default"]
     window_size = config["window_size"]
     input_shape = (window_size, len(SIGNAL_COLS))
@@ -369,11 +407,15 @@ def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=5):
             scores.append(0.0)
         finally:
             _free_memory(model)
-            del X_train, X_val, y_train, y_val
+            if 'X_train' in locals(): del X_train
+            if 'X_val'   in locals(): del X_val
+            if 'y_train' in locals(): del y_train
+            if 'y_val'   in locals(): del y_val
+            gc.collect()
 
     return float(np.mean(scores)) if scores else 0.0
 
-def optimize_hyperparams(df, num_classes, n_trials=50, n_optuna_epochs=10):
+def optimize_hyperparams(df, num_classes, n_trials=N_OPTUNA_TRIALS, n_optuna_epochs=N_OPTUNA_EPOCHS):
     print(f"\nOPTUNA CNN-LSTM — {n_trials} trials | {N_OPTUNA_SESSIONS} sessions\n" + "=" * 60)
     config = WINDOW_CONFIGS["default"]
     session_windows = precompute_session_windows(df, config["window_size"], config["step_size"])
@@ -396,6 +438,54 @@ def optimize_hyperparams(df, num_classes, n_trials=50, n_optuna_epochs=10):
     with open(OPTUNA_PATH_CNN_LSTM, "w") as f:
         json.dump({"best_value": study.best_value, "best_params": study.best_params}, f, indent=4)
     return study.best_params
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. MODÈLE GLOBAL
+# ══════════════════════════════════════════════════════════════════════
+def train_global_model(df, best_params, num_classes):
+    print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
+    config = WINDOW_CONFIGS["default"]
+    W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
+
+    df_all = df.copy()
+    scaler = RobustScaler()
+    df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
+    X_all, y_all = extract_all_windows(df_all, W_SIZE, S_SIZE)
+    del df_all; gc.collect()
+
+    if USE_SMOTE:
+        X_all, y_all = apply_smote(X_all, y_all, label="global")
+    print(f"  Fenêtres totales : {len(X_all)}")
+
+    model = None
+    try:
+        idx = np.random.default_rng(42).permutation(len(X_all))
+        split = int(0.9 * len(X_all))
+        X_tr, y_tr = X_all[idx[:split]], y_all[idx[:split]]
+        X_vl, y_vl = X_all[idx[split:]], y_all[idx[split:]]
+        model = build_model(
+            optuna.trial.FixedTrial(best_params),
+            (W_SIZE, len(SIGNAL_COLS)), num_classes
+        )
+        model.fit(
+            X_tr, to_categorical(y_tr, num_classes),
+            validation_data=(X_vl, to_categorical(y_vl, num_classes)),
+            epochs=EPOCHS,
+            batch_size=best_params.get("batch_size", 32),
+            callbacks=[EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
+                       TerminateOnNaN()],
+            verbose=1,
+        )
+        models_dir = MODELS_DIR / "CNN-LSTM"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        _save_tflite_int8(model, X_all, models_dir, f"{MODEL_NAME}_global")
+        print(f"  ✅ Modèle global sauvegardé.")
+    except Exception as exc:
+        print(f"  ❌ Modèle global échoué ({type(exc).__name__}: {exc})")
+    finally:
+        _free_memory(model)
+        del X_all, y_all
+        gc.collect()
 
 # ══════════════════════════════════════════════════════════════════════
 # 8. BOUCLE LOSO
@@ -490,11 +580,6 @@ def main():
             plot_fold(history, test_idx+1, test_part, test_sess,
                       plots_dir, f1_mac, bal_acc, y_test, y_pred)
 
-            models_dir = MODELS_DIR / "CNN-LSTM"
-            models_dir.mkdir(parents=True, exist_ok=True)
-            stem = f"CNN_LSTM_fold{test_idx+1}_testP{test_part}_S{test_sess}"
-            _save_tflite_int8(model, X_fit, models_dir, stem)
-
             all_metrics.append({
                 "Fold": test_idx+1, "Participant": int(test_part), "Session": int(test_sess),
                 "F1_Macro": float(f1_mac), "Balanced_Accuracy": float(bal_acc),
@@ -534,6 +619,8 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
+
+    train_global_model(df, best_params, num_classes)
 
 
 if __name__ == "__main__":

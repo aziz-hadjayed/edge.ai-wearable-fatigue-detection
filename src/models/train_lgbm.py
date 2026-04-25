@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import pandas as pd
-import joblib
 import lightgbm as lgb
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -22,14 +21,19 @@ from sklearn.metrics import balanced_accuracy_score, classification_report, conf
 from sklearn.utils.class_weight import compute_class_weight
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
+warnings.filterwarnings(
+    "ignore",
+    message="X does not have valid feature names",
+    category=UserWarning,
+)
 
 # ══════════════════════════════════════════════════════════════════════
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
-MODEL_NAME        = "LGBM_LOSO"
+MODEL_NAME        = "LGBM"
 LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
 TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
-N_OPTUNA_SESSIONS = 15       # sessions tirées au hasard pour évaluer chaque trial Optuna
+N_OPTUNA_SESSIONS = 36      # sessions tirées au hasard pour évaluer chaque trial Optuna
 
 WINDOW_SIZE = WINDOW_CONFIGS["default"]["window_size"]
 STEP_SIZE   = WINDOW_CONFIGS["default"]["step_size"]
@@ -151,29 +155,39 @@ def optuna_objective(trial, df, num_classes):
     scores = []
 
     for (val_part, val_sess) in val_sessions:
-        df_train = df[~((df[COL_PARTICIPANT] == val_part) & (df[COL_SESSION] == val_sess))].copy()
-        df_val   = df[ (df[COL_PARTICIPANT] == val_part)  & (df[COL_SESSION] == val_sess)].copy()
+        model = None
+        try:
+            df_train = df[~((df[COL_PARTICIPANT] == val_part) & (df[COL_SESSION] == val_sess))].copy()
+            df_val   = df[ (df[COL_PARTICIPANT] == val_part)  & (df[COL_SESSION] == val_sess)].copy()
 
-        X_train, y_train = extract_all_windows(df_train)
-        X_val,   y_val   = extract_all_windows(df_val)
-        if len(X_val) == 0: continue
+            X_train, y_train = extract_all_windows(df_train)
+            X_val,   y_val   = extract_all_windows(df_val)
+            if len(X_val) == 0: continue
 
-        w = compute_class_weight("balanced", classes=np.unique(y_train), y=y_train)
-        sample_weights = np.array([w[int(yi)] for yi in y_train])
+            w = compute_class_weight("balanced", classes=np.unique(y_train), y=y_train)
+            sample_weights = np.array([w[int(yi)] for yi in y_train])
 
-        model = build_model(params)
-        model.fit(
-            X_train, y_train,
-            sample_weight=sample_weights,
-            callbacks=[lgb.early_stopping(20, verbose=False)],
-            eval_set=[(X_val, y_val)],
-        )
-        y_pred = model.predict(X_val)
-        scores.append(f1_score(y_val, y_pred, average="macro", zero_division=0))
+            model = build_model(params)
+            model.fit(
+                X_train, y_train,
+                sample_weight=sample_weights,
+                callbacks=[lgb.early_stopping(20, verbose=False)],
+                eval_set=[(X_val, y_val)],
+            )
+            y_pred = model.predict(X_val)
+            scores.append(f1_score(y_val, y_pred, average="macro", zero_division=0))
+
+        finally:
+            _free_memory(model)
+            if 'X_train' in locals(): del X_train
+            if 'X_val'   in locals(): del X_val
+            if 'y_train' in locals(): del y_train
+            if 'y_val'   in locals(): del y_val
+            gc.collect()
 
     return float(np.mean(scores)) if scores else 0.0
 
-def optimize_hyperparams(df, num_classes, n_trials=30):
+def optimize_hyperparams(df, num_classes, n_trials=150):
     print(f"\nOPTUNA LGBM — {n_trials} trials | {N_OPTUNA_SESSIONS} sessions\n" + "=" * 60)
     study = optuna.create_study(
         direction="maximize",
@@ -191,6 +205,34 @@ def optimize_hyperparams(df, num_classes, n_trials=30):
     with open(OPTUNA_PATH_LGBM, "w") as f:
         json.dump({"best_value": study.best_value, "best_params": study.best_params}, f, indent=4)
     return study.best_params
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. MODÈLE GLOBAL
+# ══════════════════════════════════════════════════════════════════════
+def train_global_model(df, lgbm_params):
+    import joblib
+    print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
+    X_all, y_all = extract_all_windows(df)
+    print(f"  Fenêtres totales : {len(X_all)}")
+
+    w = compute_class_weight("balanced", classes=np.unique(y_all), y=y_all)
+    sample_weights = np.array([w[int(yi)] for yi in y_all])
+
+    model = None
+    try:
+        model = build_model(lgbm_params)
+        model.fit(X_all, y_all, sample_weight=sample_weights)
+        models_dir = MODELS_DIR / "LGBM"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        joblib.dump(model, models_dir / f"{MODEL_NAME}_global.pkl")
+        print(f"  ✅ Modèle global sauvegardé : {MODEL_NAME}_global.pkl")
+    except Exception as exc:
+        print(f"  ❌ Modèle global échoué ({type(exc).__name__}: {exc})")
+    finally:
+        _free_memory(model)
+        if 'X_all' in locals(): del X_all
+        if 'y_all' in locals(): del y_all
+        gc.collect()
 
 # ══════════════════════════════════════════════════════════════════════
 # 8. BOUCLE LOSO
@@ -266,10 +308,6 @@ def main():
             plot_fold(model, fold_idx+1, test_part, test_sess,
                       plots_dir, f1_mac, bal_acc, y_test, y_pred)
 
-            stem = f"LGBM_fold{fold_idx+1}_testP{test_part}_S{test_sess}"
-            joblib.dump(model, models_dir / f"{stem}.pkl")
-            print(f"  Modèle → {stem}.pkl")
-
             all_metrics.append({
                 "Fold": fold_idx+1, "Participant": int(test_part), "Session": int(test_sess),
                 "F1_Macro": float(f1_mac), "Balanced_Accuracy": float(bal_acc),
@@ -279,6 +317,11 @@ def main():
             print(f"  ❌ Fold {fold_idx+1} échoué ({type(exc).__name__}: {exc})")
         finally:
             _free_memory(model)
+            if 'X_train' in locals(): del X_train
+            if 'X_test'  in locals(): del X_test
+            if 'y_train' in locals(): del y_train
+            if 'y_test'  in locals(): del y_test
+            gc.collect()
 
     if not all_metrics:
         return print("Aucun fold complété.")
@@ -307,6 +350,8 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
+
+    train_global_model(df, lgbm_params)
 
 
 if __name__ == "__main__":

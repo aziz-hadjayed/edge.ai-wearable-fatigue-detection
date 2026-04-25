@@ -1,6 +1,8 @@
+import ctypes
 import gc
 import json
 import os
+import random
 import sys
 import warnings
 from pathlib import Path
@@ -52,32 +54,49 @@ from tensorflow.keras.regularizers import l2
 from keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
 
+def focal_loss(gamma=2.0, alpha=0.25):
+    """
+    Focal Loss pour multi-classe.
+    FL(p_t) = -alpha * (1 - p_t)^gamma * log(p_t)
+    """
+    def focal_loss_fixed(y_true, y_pred):
+        epsilon = tf.keras.backend.epsilon()
+        y_pred = tf.clip_by_value(y_pred, epsilon, 1.0 - epsilon)
+        cross_entropy = -y_true * tf.math.log(y_pred)
+        loss = alpha * tf.math.pow(1 - y_pred, gamma) * cross_entropy
+        return tf.reduce_mean(tf.reduce_sum(loss, axis=-1))
+    return focal_loss_fixed
+
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 # ══════════════════════════════════════════════════════════════════════
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
-MODEL_NAME        = "TCN_LOSO"
+MODEL_NAME        = "TCN"
 LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
 TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
-USE_SMOTE         = True    # rééquilibrage SMOTE sur X_fit uniquement
-N_OPTUNA_SESSIONS = 11      # sessions tirées au hasard pour évaluer chaque trial Optuna
+USE_SMOTE          = True   # SMOTE activé pour l'entraînement final uniquement (pas Optuna)
+N_OPTUNA_SESSIONS  = 15      # réduit : moins de folds par trial → moins de RAM cumulée
+N_OPTUNA_TRIALS    = 50     # réduit : budget serré sur 16 GB RAM
+N_OPTUNA_EPOCHS    = 5      # réduit : convergence rapide suffit pour le ranking
+MAX_OPTUNA_SAMPLES = 2000   # plafond fenêtres train par fold Optuna (évite OOM)
 
 # Budget Flash STM32 pour TFLite INT8
 EDGE_FLASH_BUDGET_KB = STM32_FLASH_KB
 
 OPTUNA_SPACE = {
-    "n_tcn_blocks":  [2, 3, 4, 5],
-    "tcn_filters":   [32, 64, 128],
-    "tcn_kernel":    [3, 5, 7],
+    "n_tcn_blocks":  [2, 3, 4,5],
+    "tcn_filters":   [32, 64,128],
+    "tcn_kernel":    [3, 5,7],
     "activation":    ["relu", "leaky_relu"],
     "l2_reg":        (1e-5, 1e-2),
     "optimizer":     ["adam", "rmsprop"],
-    "dense_units":   [32, 64, 128],
+    "dense_units":   [32, 64,128],
     "dropout_rate":  (0.2, 0.5),
     "learning_rate": (1e-4, 1e-3),
     "batch_size":    [32, 64, 128],
 }
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 3. MÉMOIRE
@@ -87,6 +106,11 @@ def _free_memory(model=None):
         del model
     tf.keras.backend.clear_session()
     gc.collect()
+    try:
+        # Rend explicitement la mémoire libre au kernel Linux (évite fragmentation)
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
 
 # ══════════════════════════════════════════════════════════════════════
 # 4. EXPORT STM32 — TFLite INT8 + C header
@@ -106,6 +130,21 @@ def _export_c_array(tflite_bytes, h_path, stem):
     ]
     h_path.write_text("\n".join(lines))
 
+def _silent_tflite_convert(converter):
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
+    try:
+        os.dup2(devnull_fd, 1)
+        os.dup2(devnull_fd, 2)
+        return converter.convert()
+    finally:
+        os.dup2(saved_stdout, 1)
+        os.dup2(saved_stderr, 2)
+        os.close(saved_stdout)
+        os.close(saved_stderr)
+        os.close(devnull_fd)
+
 def _save_tflite_int8(model, X_representative, models_dir, stem):
     def representative_dataset():
         idx = np.random.default_rng(42).choice(
@@ -120,7 +159,7 @@ def _save_tflite_int8(model, X_representative, models_dir, stem):
     converter.target_spec.supported_ops  = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
     converter.inference_input_type       = tf.int8
     converter.inference_output_type      = tf.int8
-    tflite_bytes = converter.convert()
+    tflite_bytes = _silent_tflite_convert(converter)
 
     tflite_path = models_dir / f"{stem}_int8.tflite"
     tflite_path.write_bytes(tflite_bytes)
@@ -177,27 +216,61 @@ def plot_fold(history, fold_idx, test_part, test_sess, save_dir,
     print(f"  Courbes sauvegardées : {plot_path}")
 
 # ══════════════════════════════════════════════════════════════════════
-# 6. DONNÉES — fenêtrage + SMOTE + pré-calcul Optuna
+# 6. DONNÉES — fenêtrage + SMOTE (final uniquement)
 # ══════════════════════════════════════════════════════════════════════
-def extract_windows(group_df, window_size, step_size):
-    X = group_df[SIGNAL_COLS].values
-    y = group_df[COL_LABEL].values
-    wx, wy = [], []
-    for start in range(0, len(X) - window_size + 1, step_size):
-        end = start + window_size
-        vals, counts = np.unique(y[start:end], return_counts=True)
-        wx.append(X[start:end])
-        wy.append(vals[np.argmax(counts)])
-    return wx, wy
+def get_window_indices(df, window_size, step_size, num_classes):
+    indices = []
+    groups = df.groupby([COL_PARTICIPANT, COL_SESSION])
+    
+    full_X = df[SIGNAL_COLS].values.astype(np.float32)
+    full_y = df[COL_LABEL].values.astype(np.int32)
+    current_offset = 0
+    
+    for _, group in groups:
+        n = len(group)
+        if n >= window_size:
+            for start in range(0, n - window_size + 1, step_size):
+                indices.append(current_offset + start)
+        current_offset += n
+    return full_X, full_y, np.array(indices, dtype=np.int32)
 
-def extract_all_windows(df, window_size, step_size):
-    X_all, y_all = [], []
-    if COL_TIMESTAMP in df.columns:
-        df = df.sort_values([COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP])
-    for _, group in df.groupby([COL_PARTICIPANT, COL_SESSION]):
-        wx, wy = extract_windows(group, window_size, step_size)
-        X_all.extend(wx); y_all.extend(wy)
-    return np.array(X_all), np.array(y_all)
+def create_tf_dataset(df, window_size, step_size, batch_size, num_classes):
+    if len(df) < window_size:
+        return None, 0
+    
+    X_raw, y_raw, idxs = get_window_indices(df, window_size, step_size, num_classes)
+    if len(idxs) == 0:
+        return None, 0
+
+    def fetch_window(i):
+        i = int(i)
+        win_X = X_raw[i : i + window_size]
+        win_y = y_raw[i : i + window_size]
+        counts = np.bincount(win_y, minlength=num_classes)
+        label = np.argmax(counts)
+        return win_X, to_categorical(label, num_classes=num_classes)
+
+    dataset = tf.data.Dataset.from_tensor_slices(idxs)
+    dataset = dataset.map(
+        lambda i: tf.py_function(fetch_window, [i], [tf.float32, tf.float32]),
+        num_parallel_calls=tf.data.AUTOTUNE
+    )
+    dataset = dataset.map(lambda x, y: (tf.ensure_shape(x, (window_size, len(SIGNAL_COLS))), 
+                                       tf.ensure_shape(y, (num_classes,))))
+    
+    dataset = dataset.repeat().batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    steps = (len(idxs) + batch_size - 1) // batch_size
+    return dataset, steps
+
+def get_window_labels(df, window_size, step_size):
+    y_all = []
+    groups = df.groupby([COL_PARTICIPANT, COL_SESSION])
+    for _, group in groups:
+        y = group[COL_LABEL].values.astype(np.int32)
+        for start in range(0, len(y) - window_size + 1, step_size):
+            counts = np.bincount(y[start : start + window_size])
+            y_all.append(np.argmax(counts))
+    return np.array(y_all)
 
 def apply_smote(X, y, label="fit"):
     n_samples, timesteps, n_features = X.shape
@@ -213,19 +286,6 @@ def apply_smote(X, y, label="fit"):
     unique2, counts2 = np.unique(y_res, return_counts=True)
     print(f"  SMOTE [{label}] après : { {int(u): int(c) for u, c in zip(unique2, counts2)} }")
     return X_res.reshape(-1, timesteps, n_features), y_res
-
-def precompute_session_windows(df, window_size, step_size):
-    """Pré-extrait les fenêtres brutes (float16) par session — une seule fois pour Optuna."""
-    session_windows = {}
-    if COL_TIMESTAMP in df.columns:
-        df = df.sort_values([COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP])
-    for (part, sess), group in df.groupby([COL_PARTICIPANT, COL_SESSION]):
-        wx, wy = extract_windows(group, window_size, step_size)
-        if wx:
-            session_windows[(part, sess)] = (np.array(wx, dtype=np.float16), np.array(wy))
-    total_mb = sum(x.nbytes for x, _ in session_windows.values()) / 1024 ** 2
-    print(f"  Fenêtres pré-calculées : {len(session_windows)} sessions — {total_mb:.1f} MB RAM")
-    return session_windows
 
 # ══════════════════════════════════════════════════════════════════════
 # 7. MODÈLE TCN PUR + OPTUNA
@@ -290,47 +350,37 @@ def build_model(trial, input_shape, num_classes):
 
     model = Model(inputs, outputs, name="TCN")
     opt = Adam(learning_rate) if optimizer_str == "adam" else RMSprop(learning_rate)
-    model.compile(optimizer=opt, loss="categorical_crossentropy",
+    
+    # Utilisation de Focal Loss comme demandé
+    model.compile(optimizer=opt, 
+                  loss=focal_loss(gamma=2.0, alpha=0.5),
                   metrics=["accuracy"], jit_compile=False)
     return model
 
-def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=5):
+def optuna_objective(trial, df, num_classes, n_optuna_epochs=N_OPTUNA_EPOCHS):
     config      = WINDOW_CONFIGS["default"]
     window_size = config["window_size"]
+    step_size   = config["step_size"]
     input_shape = (window_size, len(SIGNAL_COLS))
     batch_size  = trial.suggest_categorical("batch_size", OPTUNA_SPACE["batch_size"])
 
-    import random
-    all_sessions  = list(session_windows.keys())
+    all_sessions  = list(df.groupby([COL_PARTICIPANT, COL_SESSION]).groups.keys())
     eval_sessions = random.sample(all_sessions, min(N_OPTUNA_SESSIONS, len(all_sessions)))
     scores = []
 
     for fold_idx, (val_part, val_sess) in enumerate(eval_sessions):
-        train_keys   = [(p, s) for (p, s) in all_sessions if (p, s) != (val_part, val_sess)]
-        all_train_2d = np.concatenate(
-            [session_windows[(p, s)][0].reshape(-1, len(SIGNAL_COLS)).astype(np.float32)
-             for (p, s) in train_keys]
-        )
-        y_train = np.concatenate([session_windows[(p, s)][1] for (p, s) in train_keys])
-        scaler  = RobustScaler().fit(all_train_2d)
-        del all_train_2d; gc.collect()
+        df_train = df[~((df[COL_PARTICIPANT] == val_part) & (df[COL_SESSION] == val_sess))].copy()
+        df_val   = df[ (df[COL_PARTICIPANT] == val_part)  & (df[COL_SESSION] == val_sess)].copy()
+        
+        scaler = RobustScaler()
+        df_train[SIGNAL_COLS] = scaler.fit_transform(df_train[SIGNAL_COLS])
+        df_val[SIGNAL_COLS]   = scaler.transform(df_val[SIGNAL_COLS])
 
-        X_train = np.concatenate([
-            scaler.transform(
-                session_windows[(p, s)][0].reshape(-1, len(SIGNAL_COLS)).astype(np.float32)
-            ).reshape(-1, window_size, len(SIGNAL_COLS))
-            for (p, s) in train_keys
-        ])
-        X_val_raw, y_val = session_windows[(val_part, val_sess)]
-        if len(X_val_raw) == 0:
-            continue
-        X_val = scaler.transform(
-            X_val_raw.astype(np.float32).reshape(-1, len(SIGNAL_COLS))
-        ).reshape(-1, window_size, len(SIGNAL_COLS))
-        del scaler; gc.collect()
+        ds_train, st_train = create_tf_dataset(df_train, window_size, step_size, batch_size, num_classes)
+        ds_val,   st_val   = create_tf_dataset(df_val,   window_size, step_size, batch_size, num_classes)
 
-        w = compute_class_weight("balanced", classes=np.unique(y_train), y=y_train)
-        class_weight_dict = {c: wt for c, wt in zip(np.unique(y_train), w)}
+        if ds_train is None or ds_val is None:
+            scores.append(0.0); continue
 
         model = None
         try:
@@ -342,13 +392,19 @@ def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=5):
                 raise optuna.exceptions.TrialPruned(f"Flash {model_kb:.0f} KB > {EDGE_FLASH_BUDGET_KB} KB")
 
             model.fit(
-                X_train, to_categorical(y_train, num_classes),
-                epochs=n_optuna_epochs, batch_size=batch_size,
-                class_weight=class_weight_dict,
-                callbacks=[TerminateOnNaN()], verbose=0,
+                ds_train,
+                epochs=n_optuna_epochs, 
+                steps_per_epoch=st_train,
+                validation_data=ds_val,
+                validation_steps=st_val,
+                callbacks=[TerminateOnNaN()], 
+                verbose=0,
             )
-            y_pred = np.argmax(model.predict(X_val, verbose=0), axis=1)
-            score  = f1_score(y_val, y_pred, average="macro", zero_division=0)
+            y_pred = np.argmax(model.predict(ds_val, steps=st_val, verbose=0), axis=1)
+            y_val_true = get_window_labels(df_val, window_size, step_size)
+            
+            min_len = min(len(y_pred), len(y_val_true))
+            score  = f1_score(y_val_true[:min_len], y_pred[:min_len], average="macro", zero_division=0)
             scores.append(score)
 
             trial.report(score, step=fold_idx)
@@ -362,26 +418,27 @@ def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=5):
             scores.append(0.0)
         finally:
             _free_memory(model)
-            del X_train, X_val, y_train, y_val
+            if 'ds_train' in locals(): del ds_train
+            if 'ds_val'   in locals(): del ds_val
+            gc.collect()
 
     return float(np.mean(scores)) if scores else 0.0
 
-def optimize_hyperparams(df, num_classes, n_trials=50, n_optuna_epochs=10):
+def optimize_hyperparams(df, num_classes, n_trials=N_OPTUNA_TRIALS, n_optuna_epochs=N_OPTUNA_EPOCHS):
     print(f"\nOPTUNA TCN — {n_trials} trials | {N_OPTUNA_SESSIONS} sessions\n" + "=" * 60)
-    config = WINDOW_CONFIGS["default"]
-    session_windows = precompute_session_windows(df, config["window_size"], config["step_size"])
 
     study = optuna.create_study(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=42),
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=1),
     )
+    # df passé directement — fenêtres extraites à la demande dans l'objectif
     study.optimize(
-        lambda trial: optuna_objective(trial, session_windows, num_classes, n_optuna_epochs),
+        lambda trial: optuna_objective(trial, df, num_classes, n_optuna_epochs),
         n_trials=n_trials, show_progress_bar=True,
         gc_after_trial=True, catch=(Exception,),
     )
-    del session_windows; gc.collect()
+    gc.collect()
 
     print(f"\nBest F1-Macro : {study.best_value:.4f}")
     print(f"Best params   : {study.best_params}")
@@ -389,6 +446,46 @@ def optimize_hyperparams(df, num_classes, n_trials=50, n_optuna_epochs=10):
     with open(OPTUNA_PATH_TCN, "w") as f:
         json.dump({"best_value": study.best_value, "best_params": study.best_params}, f, indent=4)
     return study.best_params
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. MODÈLE GLOBAL
+# ══════════════════════════════════════════════════════════════════════
+def train_global_model(df, best_params, num_classes):
+    print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
+    config = WINDOW_CONFIGS["default"]
+    W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
+
+    df_all = df.copy()
+    scaler = RobustScaler()
+    df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
+    
+    ds_train, st_train = create_tf_dataset(df_all, W_SIZE, S_SIZE, best_params.get("batch_size", 32), num_classes)
+    
+    model = None
+    try:
+        model = build_model(
+            optuna.trial.FixedTrial(best_params),
+            (W_SIZE, len(SIGNAL_COLS)), num_classes
+        )
+        model.fit(
+            ds_train,
+            epochs=EPOCHS,
+            steps_per_epoch=st_train,
+            callbacks=[EarlyStopping(monitor="loss", patience=15, restore_best_weights=True),
+                       TerminateOnNaN()],
+            verbose=1,
+        )
+        models_dir = MODELS_DIR / "TCN"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        # On passe un échantillon pour le TFLite representative dataset
+        X_sample, _ = next(iter(ds_train.unbatch().batch(200)))
+        _save_tflite_int8(model, X_sample.numpy(), models_dir, f"{MODEL_NAME}_global")
+        print(f"  ✅ Modèle global sauvegardé.")
+    except Exception as exc:
+        print(f"  ❌ Modèle global échoué ({type(exc).__name__}: {exc})")
+    finally:
+        _free_memory(model)
+        gc.collect()
 
 # ══════════════════════════════════════════════════════════════════════
 # 8. BOUCLE LOSO
@@ -415,7 +512,6 @@ def main():
     )
 
     all_metrics = []
-    import random
     random.seed(42)
 
     for test_idx, (test_part, test_sess) in enumerate(unique_sessions):
@@ -438,23 +534,12 @@ def main():
         df_val[SIGNAL_COLS]  = scaler.transform(df_val[SIGNAL_COLS])
         df_test[SIGNAL_COLS] = scaler.transform(df_test[SIGNAL_COLS])
 
-        X_fit,  y_fit  = extract_all_windows(df_fit,  W_SIZE, S_SIZE)
-        X_val,  y_val  = extract_all_windows(df_val,  W_SIZE, S_SIZE)
-        X_test, y_test = extract_all_windows(df_test, W_SIZE, S_SIZE)
+        ds_fit, st_fit = create_tf_dataset(df_fit, W_SIZE, S_SIZE, best_params.get("batch_size", 32), num_classes)
+        ds_val, st_val = create_tf_dataset(df_val, W_SIZE, S_SIZE, best_params.get("batch_size", 32), num_classes)
+        ds_test, st_test = create_tf_dataset(df_test, W_SIZE, S_SIZE, best_params.get("batch_size", 32), num_classes)
 
-        if len(X_test) == 0:
-            print(f"  WARNING: test vide pour P{test_part}. Skip."); continue
-        if len(X_val) == 0:
-            print(f"  WARNING: val vide pour P{val_part}. Skip.");   continue
-
-        print(f"  Fit: {len(X_fit)} | Val: {len(X_val)} | Test: {len(X_test)} fenêtres")
-
-        if USE_SMOTE:
-            X_fit, y_fit = apply_smote(X_fit, y_fit, label=f"fold{test_idx+1}")
-            weight_dict  = None
-        else:
-            w           = compute_class_weight("balanced", classes=np.unique(y_fit), y=y_fit)
-            weight_dict = dict(enumerate(w))
+        if ds_fit is None or ds_val is None or ds_test is None:
+            print(f"  WARNING: split vide. Skip."); continue
 
         model = None
         try:
@@ -463,30 +548,28 @@ def main():
                 (W_SIZE, len(SIGNAL_COLS)), num_classes
             )
             history = model.fit(
-                X_fit, to_categorical(y_fit, num_classes),
+                ds_fit,
                 epochs=EPOCHS,
-                validation_data=(X_val, to_categorical(y_val, num_classes)),
-                batch_size=best_params.get("batch_size", 32),
+                steps_per_epoch=st_fit,
+                validation_data=ds_val,
+                validation_steps=st_val,
                 callbacks=[EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True),
                            TerminateOnNaN()],
-                class_weight=weight_dict,
                 verbose=1,
             )
 
-            y_pred  = np.argmax(model.predict(X_test, verbose=0), axis=1)
-            f1_mac  = f1_score(y_test, y_pred, average="macro", zero_division=0)
-            bal_acc = balanced_accuracy_score(y_test, y_pred)
+            y_pred  = np.argmax(model.predict(ds_test, steps=st_test, verbose=0), axis=1)
+            y_test_true = get_window_labels(df_test, W_SIZE, S_SIZE)
+            
+            min_len = min(len(y_pred), len(y_test_true))
+            f1_mac  = f1_score(y_test_true[:min_len], y_pred[:min_len], average="macro", zero_division=0)
+            bal_acc = balanced_accuracy_score(y_test_true[:min_len], y_pred[:min_len])
             print(f"  ✅ F1-Macro: {f1_mac:.4f} | Bal.Acc: {bal_acc:.4f}")
 
             plots_dir = BASE_DIR / "training_curves" / "TCN"
             plots_dir.mkdir(parents=True, exist_ok=True)
             plot_fold(history, test_idx+1, test_part, test_sess,
-                      plots_dir, f1_mac, bal_acc, y_test, y_pred)
-
-            models_dir = MODELS_DIR / "TCN"
-            models_dir.mkdir(parents=True, exist_ok=True)
-            stem = f"TCN_fold{test_idx+1}_testP{test_part}_S{test_sess}"
-            _save_tflite_int8(model, X_fit, models_dir, stem)
+                      plots_dir, f1_mac, bal_acc, y_test_true[:min_len], y_pred[:min_len])
 
             all_metrics.append({
                 "Fold": test_idx+1, "Participant": int(test_part), "Session": int(test_sess),
@@ -497,7 +580,9 @@ def main():
             print(f"  ❌ Fold {test_idx+1} échoué ({type(exc).__name__}: {exc})")
         finally:
             _free_memory(model)
-            del X_fit, X_val, X_test, y_fit, y_val, y_test
+            if 'ds_fit' in locals(): del ds_fit
+            if 'ds_val' in locals(): del ds_val
+            if 'ds_test' in locals(): del ds_test
             gc.collect()
 
     if not all_metrics:
@@ -527,6 +612,8 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
+
+    train_global_model(df, best_params, num_classes)
 
 
 if __name__ == "__main__":

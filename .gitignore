@@ -16,12 +16,25 @@ models_saved/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+.claude/
+.vscode/
 
 # Secrets
 .env
 credentials.json
 
-# doc
+# documents
+README.md
+# Secrets
+.env
+credentials.json
+
+# documents
 README1.md
 RAPPORT_TRAVAIL.md
 ADAPTIVE_LOSO_GUIDE.md
+
+cuda_12.6.0_560.28.03_linux.run
+
+training_curves/
+reports/

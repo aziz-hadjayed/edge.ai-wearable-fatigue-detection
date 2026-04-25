@@ -1,0 +1,15 @@
+{
+    "best_value": 0.7201557571733009,
+    "best_params": {
+        "batch_size": 32,
+        "n_tcn_blocks": 3,
+        "tcn_filters": 64,
+        "tcn_kernel": 5,
+        "activation": "leaky_relu",
+        "l2_reg": 0.0006379184058649745,
+        "optimizer": "adam",
+        "dense_units": 128,
+        "dropout_rate": 0.24365524869541297,
+        "learning_rate": 0.0004148672008962955
+    }
+}

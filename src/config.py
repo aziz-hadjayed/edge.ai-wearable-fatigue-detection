@@ -10,7 +10,7 @@ INTERIM_DIR   = DATA_DIR / "02_interim"
 PROCESSED_DIR = DATA_DIR / "03_processed"
 REPORTS_DIR   = BASE_DIR / "reports"
 MODELS_DIR    = BASE_DIR / "models_saved"
-
+OPTUNA = BASE_DIR / "optuna"
 DATA_RAW             = RAW_DIR
 METADATA_PATH        = RAW_DIR / "metadata.csv"
 DATA_MODEL_READY     = DATA_DIR / "used" / "dataset.csv"
@@ -56,17 +56,17 @@ STM32_RAM_KB   = 1433   # STM32H7A3ZIT6Q
 # ══════════════════════════════════════════════════════════════════════
 USE_OPTUNA_CNN_1D  = False
 USE_OPTUNA_LSTM    = True
-USE_OPTUNA_LGBM    = True
+USE_OPTUNA_LGBM    = False
 USE_OPTUNA_CNN_TCN = False
-USE_OPTUNA_TCN     = False
-USE_OPTUNA_CNN_LSTM = False
+USE_OPTUNA_TCN     = True
+USE_OPTUNA_CNN_LSTM = True
 
-OPTUNA_PATH_CNN_D1  = REPORTS_DIR / "optuna_cnn_results.json"
-OPTUNA_PATH_LSTM    = REPORTS_DIR / "optuna_lstm_results.json"
-OPTUNA_PATH_LGBM    = REPORTS_DIR / "optuna_lgbm_results.json"
-OPTUNA_PATH_CNN_TCN = REPORTS_DIR / "optuna_cnn_tcn_results.json"
-OPTUNA_PATH_TCN     = REPORTS_DIR / "optuna_tcn_results.json"
-OPTUNA_PATH_CNN_LSTM = REPORTS_DIR / "optuna_cnn_lstm_results.json"
+OPTUNA_PATH_CNN_D1  = OPTUNA / "optuna_cnn_results.json"
+OPTUNA_PATH_LSTM    = OPTUNA / "optuna_lstm_results.json"
+OPTUNA_PATH_LGBM    = OPTUNA / "optuna_lgbm_results.json"
+OPTUNA_PATH_CNN_TCN = OPTUNA / "optuna_cnn_tcn_results.json"
+OPTUNA_PATH_TCN     = OPTUNA / "optuna_tcn_results.json"
+OPTUNA_PATH_CNN_LSTM = OPTUNA / "optuna_cnn_lstm_results.json"
 
 # ══════════════════════════════════════════════════════════════════════
 # 6. WINDOW CONFIGS — adaptatif par participant (LOSO)
@@ -126,16 +126,16 @@ MODEL_PARAMS = {
         "learning_rate": 0.0003734774908783387
     },
     "TCN": {
-        "batch_size": 64,
+        "batch_size": 128,
         "n_tcn_blocks": 4,
         "tcn_filters": 64,
         "tcn_kernel": 5,
         "activation": "relu",
-        "l2_reg": 1e-4,
-        "optimizer": "adam",
-        "dense_units": 64,
-        "dropout_rate": 0.3,
-        "learning_rate": 0.0005,
+        "l2_reg": 1.1554221780153881e-05,
+        "optimizer": "rmsprop",
+        "dense_units": 32,
+        "dropout_rate": 0.3196140167572857,
+        "learning_rate": 0.00032811692941705107
     },
     "CNN_LSTM": {
         "batch_size": 32,

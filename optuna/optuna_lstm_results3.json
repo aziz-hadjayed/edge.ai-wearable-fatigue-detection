@@ -1,0 +1,13 @@
+{
+    "best_value": 0.7221932096108644,
+    "best_params": {
+        "n_lstm_layers": 1,
+        "lstm_units": 128,
+        "bidirectional": true,
+        "dense_units": 32,
+        "dropout_rate": 0.3181653099912698,
+        "l2_reg": 0.005910698619088547,
+        "learning_rate": 0.00022150109033839915,
+        "batch_size": 64
+    }
+}

@@ -254,3 +254,7 @@ Le nombre d'epochs n'est **pas choisi par Optuna**. Il est déterminé par trois
 | Tous les autres | **10**     | Config standard                                                 |
 
 Best is trial 2 with value: 0.77377529145675.
+
+pour TCN ...
+✔ SMOTE uniquement FINAL training
+❌ pas dans Optuna

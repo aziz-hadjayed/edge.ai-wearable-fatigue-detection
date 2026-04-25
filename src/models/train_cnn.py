@@ -57,7 +57,7 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # ══════════════════════════════════════════════════════════════════════
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
-MODEL_NAME        = "CNN_1D_LOSO"
+MODEL_NAME        = "CNN_1D"
 LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
 TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
 USE_SMOTE         = True    # rééquilibrage SMOTE sur X_fit uniquement
@@ -106,6 +106,21 @@ def _export_c_array(tflite_bytes, h_path, stem):
     ]
     h_path.write_text("\n".join(lines))
 
+def _silent_tflite_convert(converter):
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    saved_stdout = os.dup(1)
+    saved_stderr = os.dup(2)
+    try:
+        os.dup2(devnull_fd, 1)
+        os.dup2(devnull_fd, 2)
+        return converter.convert()
+    finally:
+        os.dup2(saved_stdout, 1)
+        os.dup2(saved_stderr, 2)
+        os.close(saved_stdout)
+        os.close(saved_stderr)
+        os.close(devnull_fd)
+
 def _save_tflite_int8(model, X_representative, models_dir, stem):
     def representative_dataset():
         idx = np.random.default_rng(42).choice(
@@ -120,7 +135,7 @@ def _save_tflite_int8(model, X_representative, models_dir, stem):
     converter.target_spec.supported_ops  = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
     converter.inference_input_type       = tf.int8
     converter.inference_output_type      = tf.int8
-    tflite_bytes = converter.convert()
+    tflite_bytes = _silent_tflite_convert(converter)
 
     tflite_path = models_dir / f"{stem}_int8.tflite"
     tflite_path.write_bytes(tflite_bytes)
@@ -308,6 +323,10 @@ def optuna_objective(trial, df, num_classes):
             scores.append(0.0)
         finally:
             _free_memory(model)
+            if 'X_train' in locals(): del X_train
+            if 'X_val'   in locals(): del X_val
+            if 'y_train' in locals(): del y_train
+            if 'y_val'   in locals(): del y_val
 
     return float(np.mean(scores)) if scores else 0.0
 
@@ -329,6 +348,54 @@ def optimize_hyperparams(df, num_classes, n_trials=50):
     with open(OPTUNA_PATH_CNN_D1, "w") as f:
         json.dump({"best_value": study.best_value, "best_params": study.best_params}, f, indent=4)
     return study.best_params
+
+# ══════════════════════════════════════════════════════════════════════
+# 9. MODÈLE GLOBAL
+# ══════════════════════════════════════════════════════════════════════
+def train_global_model(df, best_params, num_classes):
+    print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
+    config = WINDOW_CONFIGS["default"]
+    W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
+
+    df_all = df.copy()
+    scaler = RobustScaler()
+    df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
+    X_all, y_all = extract_all_windows(df_all, W_SIZE, S_SIZE)
+    del df_all; gc.collect()
+
+    if USE_SMOTE:
+        X_all, y_all = apply_smote(X_all, y_all, label="global")
+    print(f"  Fenêtres totales : {len(X_all)}")
+
+    model = None
+    try:
+        idx = np.random.default_rng(42).permutation(len(X_all))
+        split = int(0.9 * len(X_all))
+        X_tr, y_tr = X_all[idx[:split]], y_all[idx[:split]]
+        X_vl, y_vl = X_all[idx[split:]], y_all[idx[split:]]
+        model = build_model(
+            optuna.trial.FixedTrial(best_params),
+            (W_SIZE, len(SIGNAL_COLS)), num_classes
+        )
+        model.fit(
+            X_tr, to_categorical(y_tr, num_classes),
+            validation_data=(X_vl, to_categorical(y_vl, num_classes)),
+            epochs=EPOCHS,
+            batch_size=best_params.get("batch_size", 32),
+            callbacks=[EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
+                       TerminateOnNaN()],
+            verbose=1,
+        )
+        models_dir = MODELS_DIR / "CNN"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        _save_tflite_int8(model, X_all, models_dir, f"{MODEL_NAME}_global")
+        print(f"  ✅ Modèle global sauvegardé.")
+    except Exception as exc:
+        print(f"  ❌ Modèle global échoué ({type(exc).__name__}: {exc})")
+    finally:
+        _free_memory(model)
+        del X_all, y_all
+        gc.collect()
 
 # ══════════════════════════════════════════════════════════════════════
 # 8. BOUCLE LOSO
@@ -422,11 +489,6 @@ def main():
             plot_fold(history, test_idx+1, test_part, test_sess,
                       plots_dir, f1_mac, bal_acc, y_test, y_pred)
 
-            models_dir = MODELS_DIR / "CNN"
-            models_dir.mkdir(parents=True, exist_ok=True)
-            stem = f"CNN_fold{test_idx+1}_testP{test_part}_S{test_sess}"
-            _save_tflite_int8(model, X_fit, models_dir, stem)
-
             all_metrics.append({
                 "Fold": test_idx+1, "Participant": int(test_part), "Session": int(test_sess),
                 "F1_Macro": float(f1_mac), "Balanced_Accuracy": float(bal_acc),
@@ -466,6 +528,8 @@ def main():
     with open(METRICS_PATH, "w") as f:
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
+
+    train_global_model(df, best_params, num_classes)
 
 
 if __name__ == "__main__":
