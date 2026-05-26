@@ -1,0 +1,18 @@
+{
+    "best_value": 0.8844513806236294,
+    "best_params": {
+        "batch_size": 32,
+        "n_conv_blocks": 2,
+        "kernel_size": 5,
+        "filters": 128,
+        "use_batchnorm": false,
+        "activation": "relu",
+        "pool_size": 3,
+        "global_pooling": "flatten",
+        "l2_reg": 0.0004677279199169856,
+        "optimizer": "rmsprop",
+        "dense_units": 256,
+        "dropout_rate": 0.36790290255054414,
+        "learning_rate": 0.00015679008763782025
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "best_value": 0.7754318089349909,
+    "best_params": {
+        "n_reservoir": 200,
+        "spectral_radius": 1.1221725306045482,
+        "sparsity": 0.8061352270515106,
+        "leak_rate": 0.619124620142673,
+        "input_scaling": 0.1126658016115058,
+        "ridge_alpha": 13.403160880196538,
+        "washout": 10,
+        "state_summary": "last_mean_std"
+    }
+}

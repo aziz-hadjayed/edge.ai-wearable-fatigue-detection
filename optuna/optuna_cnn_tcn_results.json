@@ -1,0 +1,17 @@
+{
+    "best_value": 0.8461832681084019,
+    "best_params": {
+        "batch_size": 32,
+        "cnn_filters": 64,
+        "cnn_kernel": 5,
+        "n_tcn_blocks": 3,
+        "tcn_filters": 64,
+        "tcn_kernel": 5,
+        "activation": "relu",
+        "l2_reg": 1.0407988654029368e-05,
+        "optimizer": "rmsprop",
+        "dense_units": 64,
+        "dropout_rate": 0.30275665469524965,
+        "learning_rate": 0.0003734774908783387
+    }
+}
