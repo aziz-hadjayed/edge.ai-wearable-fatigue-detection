@@ -9,16 +9,20 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, dcc, html
 
+# Add project root to sys.path so we can import from src
+import sys
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+
+from src.config import RAW_DIR, PROCESSED_DIR
+
 try:
     from scipy.signal import find_peaks
 except ImportError:
     find_peaks = None
 
 
-BASE_DIR = Path(__file__).resolve().parent
-RAW_DIR = BASE_DIR / "data" / "01_raw"
 V1_CANDIDATES = [
-    BASE_DIR / "data" / "03_processed" / "dataset_ref.csv",
+    PROCESSED_DIR / "dataset_ref.csv",
 ]
 SIGNALS = [
     "acc_x",

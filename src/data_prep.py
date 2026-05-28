@@ -1,18 +1,258 @@
-# ------------------------------------------// Importations
+# --------------------------------------------------------------------// Importations
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
+from scipy.signal import butter, filtfilt, find_peaks
 from sklearn.preprocessing import RobustScaler
+try:
+    from .config import *
+except ImportError:
+    from config import *
 
-from src.config import *
-from src.fonctions_principal_clean_data_1 import *
+# --------------------------------------------------------------------// Fonctions de préparation des données
+
+PATH_BREATHING = "chest_raw_breathing.csv"
+PATH_MARKERS = "exp_markers.csv"
+
+# ==============================================================================
+# Paramètres respiration
+# ==============================================================================
+FS_BREATHING = 25.0
+FMIN, FMAX   = 0.05, 0.80
+MIN_DIST_S   = 1.5
+PROM_MIN     = 100
+PROM_OK      = 500
+
+# ==============================================================================
+# Fréquences capteurs
+# ==============================================================================
+SENSOR_FREQ = {
+    "chest_physiology_summary.csv": 1,
+    "wrist_acc.csv":                32,
+    "wrist_eda.csv":                4,
+    "wrist_hr.csv":                 1,
+    "wrist_ibi.csv":                0.59,
+    "wrist_skin_temperature.csv":   4,
+}
+
+TARGET_FREQ   = 1
+TARGET_PERIOD = 1000 / TARGET_FREQ  # ms
+
+# ==============================================================================
+# Colonnes
+# ==============================================================================
+FILE_COLS = {
+    "wrist_acc.csv": {"ax": "acc_x", "ay": "acc_y", "az": "acc_z"},
+    "wrist_eda.csv": {"eda": "eda"},
+    "wrist_hr.csv": {"hr": "wrist_hr"},
+    "wrist_ibi.csv": {"duration": "ibi"},
+    "wrist_skin_temperature.csv": {"temp": "temp"},
+}
+
+LABELS_OF_INTEREST = ["baseline", "activity", "fatigue"]
+
+def get_label_intervals(markers_path):
+    """
+    Extrait les intervalles de temps pour chaque label d'intérêt depuis le fichier des marqueurs.
+    Convertit les timestamps absolus en temps relatif par rapport au début de la session.
+    """
+    """
+    Extrait les intervalles de temps pour chaque label d'intérêt depuis le fichier des marqueurs.
+    Convertit les timestamps absolus en temps relatif par rapport au début de la session.
+    """
+    df = pd.read_csv(markers_path)
+    df.columns = df.columns.str.strip()
+
+    intervals = []
+    active = {}
+
+    for _, row in df.iterrows():
+        ts = float(row["utcTime"])
+        event = str(row["eventMarker"]).lower()
+
+        for lbl in LABELS_OF_INTEREST:
+            if f"start_{lbl}" in event:
+                active[lbl] = ts
+            elif f"end_{lbl}" in event and lbl in active:
+                intervals.append((active.pop(lbl), ts, lbl))
+
+    if not intervals:
+        return [], None
+
+    # 🔥 Référence de début de session (absolue)
+    t0 = intervals[0][0]
+    # 🔥 Convertir en temps relatif par rapport à t0
+    intervals_rel = [(s - t0, e - t0, l) for s, e, l in intervals]
+
+    print(f"  ℹ t0 référence: {t0}")
+    print("  ℹ Intervalles (relatif):", intervals_rel)
+    return intervals_rel, t0
 
 
-# ------------------------------------------// Fonctions de préparation des données
-#
-# ──  structué le data et constoire la colonne label et fusion des fichiers et synchro les frequences des capteurs (4 Hz) et calcule de la rpm avec Filtrage Passe-Bande (Butterworth) ─────────────────────────────────────────
+
+# ==============================================================================
+# 2. Resample → garder temps relatif
+# ==============================================================================
+def resample_to_target_freq(df, native_freq, t_ref):
+    """
+    Ré-échantillonne un DataFrame à la fréquence cible (TARGET_FREQ).
+    Aligne les timestamps par rapport à un t_ref absolu.
+    Applique la méthode appropriée (mean, ffill, interpolate) selon la fréquence d'origine.
+    """
+    df = df.copy()
+
+    # 🔥 Synchronisation : rendre les timestamps relatifs à t_ref (absolu)
+    # AVANT resampling pour que tous les capteurs soient alignés sur le même référentiel
+    df["timestamp"] = df["timestamp"] - t_ref
+
+    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms").astype("datetime64[us]")
+    df = df.set_index("datetime").drop(columns=["timestamp"])
+
+    period = f"{int(TARGET_PERIOD * 1000)}us"
+
+    if native_freq > TARGET_FREQ:
+        df = df.resample(period).mean()
+    elif native_freq < 1:
+        df = df.resample(period).ffill()
+    elif native_freq < TARGET_FREQ:
+        df = df.resample(period).interpolate()
+    else:
+        df = df.resample(period).mean()
+
+    # 🔥 retour en ms relatif à t_ref (1970-01-01 00:00:00 dans datetime est notre 0 relatif)
+    df["timestamp"] = (df.index - pd.to_datetime(0, unit="ms")).total_seconds() * 1000
+
+    return df.reset_index(drop=True)
+
+
+
+# ==============================================================================
+# 3. Load + clean
+# ==============================================================================
+def load_rename_resample(filenames, col_map, freq, t_ref):
+    """
+    filenames : Liste de un ou plusieurs fichiers (shards) pour un même capteur
+    col_map : Dictionnaire de renommage des colonnes
+    freq : Fréquence native du capteur
+    t_ref : Timestamp de référence absolue pour la synchronisation
+    """
+    try:
+        all_dfs = []
+        for filepath in filenames:
+            df_part = pd.read_csv(filepath)
+            df_part.columns = df_part.columns.str.strip().str.lower()
+            all_dfs.append(df_part)
+
+        df = pd.concat(all_dfs)
+        ts_col = [c for c in df.columns if "time" in c][0]
+        df = df.rename(columns={ts_col: "timestamp"})
+
+        cols = {"timestamp": "timestamp"}
+        for k, v in col_map.items():
+            if k in df.columns:
+                cols[k] = v
+
+        df = df[list(cols.keys())].rename(columns=cols)
+        df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+        df = df.dropna().sort_values("timestamp").drop_duplicates(subset=["timestamp"])
+
+        return resample_to_target_freq(df, freq, t_ref)
+
+    except Exception as e:
+        print(f"⚠ erreur sur les fichiers {filenames}: {e}")
+        return None
+
+
+
+# ==============================================================================
+# 4. Breathing RPM
+# ==============================================================================
+def compute_breathing_rpm(path, t_ref):
+    """
+    Calcule la fréquence respiratoire (RPM) à partir du signal brut (chest_raw_breathing).
+    Applique un filtre passe-bande et détecte les pics pour déduire la RPM.
+    Ré-échantillonne le résultat final à 4Hz pour l'alignement avec les autres capteurs.
+    """
+    """
+    Calcule la fréquence respiratoire (RPM) à partir du signal brut (chest_raw_breathing).
+    Applique un filtre passe-bande et détecte les pics pour déduire la RPM.
+    Ré-échantillonne le résultat final à la fréquence cible pour l'alignement avec les autres capteurs.
+    """
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.strip()
+
+    ts = df["timestamp"].values
+    sig = df["breathing_waveform"].values
+
+    sig = sig - np.mean(sig)
+    b,a = butter(2, [FMIN, FMAX], btype="bandpass", fs=FS_BREATHING)
+    sig = filtfilt(b, a, sig)
+
+    peaks, props = find_peaks(
+        sig,
+        distance=int(MIN_DIST_S * FS_BREATHING),
+        prominence=PROM_MIN
+    )
+
+    rows = []
+    for i in range(len(peaks)-1):
+        dt = (peaks[i+1] - peaks[i]) / FS_BREATHING
+        rpm = 60 / dt
+
+        rows.append({
+            "timestamp": ts[peaks[i]],
+            "breathing_rpm": rpm,
+            "breathing_q": int(props["prominences"][i] >= PROM_OK)
+        })
+
+    df = pd.DataFrame(rows)
+
+    return resample_to_target_freq(df, 0.5, t_ref)
+
+
+
+# ==============================================================================
+# 5. Labels
+# ==============================================================================
+def assign_labels(df, intervals):
+    """
+    Assigne la colonne 'label' aux données resamplées en fonction des intervalles extraits.
+    Supprime les lignes ne correspondant à aucun label d'intérêt.
+    """
+    """
+    Assigne la colonne 'label' aux données resamplées en fonction des intervalles extraits.
+    Supprime les lignes ne correspondant à aucun label d'intérêt.
+    """
+    df["label"] = None
+
+    for s, e, l in intervals:
+        mask = (df["timestamp"] >= s) & (df["timestamp"] <= e)
+        df.loc[mask, "label"] = l
+
+    print("  ℹ labels trouvés:", df["label"].value_counts(dropna=False))
+
+    return df.dropna(subset=["label"])
+
+
 def data_clean_1(path):
+    """
+    Parcourt le répertoire brut et prépare le premier niveau de nettoyage :
+      - Extraction des intervalles de label et de la référence t0.
+      - Chargement et fusion des signaux (acc, eda, hr, ibi, temp) via merge_asof.
+      - Ajout de la fréquence respiratoire.
+      - Attribution des labels et filtrage des zones hors-label.
+    
+    Retourne : Un DataFrame pandas consolidé.
+    """
+    """
+    Parcourt le répertoire brut et prépare le premier niveau de nettoyage :
+      - Extraction des intervalles de label et de la référence t0.
+      - Chargement et fusion des signaux (acc, eda, hr, ibi, temp) via merge_asof.
+      - Ajout de la fréquence respiratoire.
+      - Attribution des labels et filtrage des zones hors-label.
+    
+    Retourne : Un DataFrame pandas consolidé.
+    """
     all_data = []
 
     for p_dir in path.iterdir():
@@ -37,7 +277,7 @@ def data_clean_1(path):
                 # 🔥 Détection des shards (ex: wrist_acc.csv, wrist_acc_2.csv, etc.)
                 base_name = f.replace(".csv", "")
                 shards = list(s_dir.glob(f"{base_name}*.csv"))
-                
+
                 if not shards:
                     continue
 
@@ -93,21 +333,23 @@ def data_clean_1(path):
 
             all_data.append(merged)
 
-    # ── SAVE ──────────────────────────────────────────────────────────────────────
+
+# ==============================================================================
+# SAVE
+# ==============================================================================
+
     if all_data:
         df = pd.concat(all_data)
         return df
-    #  df.to_csv(OUTPUT_DIR / "dataset_clean_1.csv", index=False)
-
-    # print("\n SUCCESS")
-    # print("Lignes:", len(df))
-    # print(df["label"].value_counts())
-
     else:
         print("\n Toujours aucune donnée (vérifier timestamps)")
 
 
-# ── Fusion des données démographiques (age, gender) depuis metadata.csv ─────────────────────────────────────────
+
+# ==============================================================================
+# Fusion des données démographiques (age, gender) depuis metadata.csv
+# ==============================================================================
+
 def merge_demographics(df: pd.DataFrame, metadata_path=None) -> pd.DataFrame:
     """
     Fusionne les colonnes 'age' et 'gender' depuis metadata.csv dans le dataset.
@@ -117,10 +359,10 @@ def merge_demographics(df: pd.DataFrame, metadata_path=None) -> pd.DataFrame:
     Retourne : DataFrame avec colonnes 'age' (int) et 'gender' (0/1) ajoutées.
     """
     meta = pd.read_csv(metadata_path, dtype={"participant_id": str})
-    
+
     # Mapping Female -> 0, Male -> 1
     meta["gender"] = meta["gender"].map({"Female": 0, "Male": 1})
-    
+
     meta = meta.rename(columns={"participant_id": COL_PARTICIPANT})[
         [COL_PARTICIPANT, "age", "gender"]
     ]
@@ -131,10 +373,28 @@ def merge_demographics(df: pd.DataFrame, metadata_path=None) -> pd.DataFrame:
     return df
 
 
-# ── visualition des données trouvé de data_clean_1 ─────────────────────────────────────────
-def visualize_data(df):
 
-    # ── Noms réels des colonnes ───────────────────────────────────────────────────
+# ==============================================================================
+# visualition des données trouvé de data_clean_1
+# ==============================================================================
+
+def visualize_data(df):
+    """
+    Affiche un résumé statistique et descriptif complet du dataset :
+    types, valeurs manquantes, doublons, distribution des labels,
+    statistiques par session/participant, continuité temporelle et corrélations.
+    """
+    """
+    Affiche un résumé statistique et descriptif complet du dataset :
+    types, valeurs manquantes, doublons, distribution des labels,
+    statistiques par session/participant, continuité temporelle et corrélations.
+    """
+
+
+# ==============================================================================
+# Noms réels des colonnes
+# ==============================================================================
+
 
     print("=" * 70)
     print("1. INFORMATIONS GÉNÉRALES")
@@ -187,7 +447,11 @@ def visualize_data(df):
     print(f"\nTimestamps dupliqués          : {n_dup_ts}")
     print(f"Pourcentage                   : {n_dup_ts / len(df) * 100:.2f}%")
 
-    # ── Investiguer les timestamps dupliqués ──────────────────────────────────────
+
+# ==============================================================================
+# Investiguer les timestamps dupliqués
+# ==============================================================================
+
     print(f"\n--- Analyse des timestamps dupliqués ---")
     dup_ts = df[df.duplicated(subset=[COL_TIMESTAMP], keep=False)]
     print(f"Participants concernés : {dup_ts[COL_PARTICIPANT].unique()}")
@@ -287,7 +551,7 @@ def visualize_data(df):
         diffs = group[COL_TIMESTAMP].diff().dropna()
         diffs = diffs[diffs > 0]  # ignorer les timestamps identiques
 
-        expected_interval = 250  # ms à 4Hz
+        expected_interval = TARGET_PERIOD
         anomalies = diffs[diffs > expected_interval * 2]
 
         print(
@@ -416,7 +680,11 @@ def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ──  Suppression des doublons ─────────────────────────────────────────
+
+# ==============================================================================
+# Suppression des doublons
+# ==============================================================================
+
 def remove_duplicates(df: pd.DataFrame, keep: str = "first") -> pd.DataFrame:
     """
     Supprime les doublons du dataset.
@@ -496,7 +764,11 @@ def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-# ──  RobustScaler (robuste aux outliers, Q1/Q3) ─────────────────────────────────────────
+
+# ==============================================================================
+# RobustScaler (robuste aux outliers, Q1/Q3)
+# ==============================================================================
+
 def normalize_features(
     X: pd.DataFrame, scaler: RobustScaler = None, fit: bool = True
 ) -> tuple[pd.DataFrame, RobustScaler]:
@@ -531,7 +803,11 @@ def normalize_features(
     return X, scaler
 
 
-# ── Conversion float64 → float32 ─────────────────────────────────────────
+
+# ==============================================================================
+# Conversion float64 → float32
+# ==============================================================================
+
 def reduce_precision(df):
     """
     Convertir les colonnes signal de float64 → float32
