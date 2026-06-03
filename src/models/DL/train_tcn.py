@@ -40,7 +40,6 @@ if gpus:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import *
 
-from imblearn.over_sampling import SMOTE
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score
 from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
@@ -73,9 +72,8 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
 MODEL_NAME        = "TCN"
-LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
-TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
-USE_SMOTE          = True   # SMOTE activé pour l'entraînement final uniquement (pas Optuna)
+LABEL_MAPPING     = {0: 0, 1: 1, 2: 2, 3: 3}
+TARGET_NAMES      = ["baseline", "activity", "pre_fatigue", "fatigue"]
 N_OPTUNA_SESSIONS  = 15      # réduit : moins de folds par trial → moins de RAM cumulée
 N_OPTUNA_TRIALS    = 50     # réduit : budget serré sur 16 GB RAM
 N_OPTUNA_EPOCHS    = 5      # réduit : convergence rapide suffit pour le ranking
@@ -216,7 +214,7 @@ def plot_fold(history, fold_idx, test_part, test_sess, save_dir,
     print(f"  Courbes sauvegardées : {plot_path}")
 
 # ══════════════════════════════════════════════════════════════════════
-# 6. DONNÉES — fenêtrage + SMOTE (final uniquement)
+# 6. DONNÉES — fenêtrage
 # ══════════════════════════════════════════════════════════════════════
 def get_window_indices(df, window_size, step_size, num_classes):
     indices = []
@@ -272,20 +270,6 @@ def get_window_labels(df, window_size, step_size):
             y_all.append(np.argmax(counts))
     return np.array(y_all)
 
-def apply_smote(X, y, label="fit"):
-    n_samples, timesteps, n_features = X.shape
-    unique, counts = np.unique(y, return_counts=True)
-    k = min(5, counts.min() - 1)
-    if k < 1:
-        print(f"  SMOTE [{label}] ignoré — classe trop petite ({counts.min()} samples)")
-        return X, y
-    print(f"  SMOTE [{label}] avant : { {int(u): int(c) for u, c in zip(unique, counts)} }")
-    X_res, y_res = SMOTE(k_neighbors=k, random_state=42).fit_resample(
-        X.reshape(n_samples, -1), y
-    )
-    unique2, counts2 = np.unique(y_res, return_counts=True)
-    print(f"  SMOTE [{label}] après : { {int(u): int(c) for u, c in zip(unique2, counts2)} }")
-    return X_res.reshape(-1, timesteps, n_features), y_res
 
 # ══════════════════════════════════════════════════════════════════════
 # 7. MODÈLE TCN PUR + OPTUNA
@@ -353,7 +337,7 @@ def build_model(trial, input_shape, num_classes):
     
     # Utilisation de Focal Loss comme demandé
     model.compile(optimizer=opt, 
-                  loss=focal_loss(gamma=2.0, alpha=0.5),
+                  loss="categorical_crossentropy",
                   metrics=["accuracy"], jit_compile=False)
     return model
 
@@ -450,7 +434,7 @@ def optimize_hyperparams(df, num_classes, n_trials=N_OPTUNA_TRIALS, n_optuna_epo
 # ══════════════════════════════════════════════════════════════════════
 # 9. MODÈLE GLOBAL
 # ══════════════════════════════════════════════════════════════════════
-def train_global_model(df, best_params, num_classes):
+def train_global_model(df_labeled, best_params, num_classes):
     print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
     config = WINDOW_CONFIGS["default"]
     W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
@@ -496,17 +480,20 @@ def main():
         return print(f"❌ Dataset non trouvé : {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
+    df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
+    df_labeled = df[df[COL_LABEL] >= 0].copy()
+    df_unlabeled = df[df[COL_LABEL] == -1].copy()
+    print(f"Labeled: {len(df_labeled)} lignes | Unlabeled: {len(df_unlabeled)} lignes")
 
     unique_sessions = [
         tuple(x) for x in
-        df[df[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
+        df_labeled[df_labeled[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
     ]
     num_classes = len(LABEL_MAPPING)
     print(f"Sessions détectées : {len(unique_sessions)}")
 
     best_params = (
-        optimize_hyperparams(df, num_classes)
+        optimize_hyperparams(df_labeled, num_classes)
         if USE_OPTUNA_TCN
         else MODEL_PARAMS["TCN"]
     )
@@ -519,8 +506,8 @@ def main():
         config = WINDOW_CONFIGS.get(test_part, WINDOW_CONFIGS["default"])
         W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
 
-        df_pool = df[~((df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess))].copy()
-        df_test = df[ (df[COL_PARTICIPANT] == test_part)  & (df[COL_SESSION] == test_sess)].copy()
+        df_pool = df_labeled[~((df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess))].copy()
+        df_test = df_labeled[ (df_labeled[COL_PARTICIPANT] == test_part)  & (df_labeled[COL_SESSION] == test_sess)].copy()
 
         pool_sessions      = [tuple(x) for x in df_pool[[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values]
         val_part, val_sess = random.choice(pool_sessions)
@@ -613,7 +600,7 @@ def main():
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
 
-    train_global_model(df, best_params, num_classes)
+    train_global_model(df_labeled, best_params, num_classes)
 
 
 if __name__ == "__main__":

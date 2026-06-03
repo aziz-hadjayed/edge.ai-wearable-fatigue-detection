@@ -1,13 +1,12 @@
 # --------------------------------------------------------------------// Importations
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from scipy.signal import butter, filtfilt, find_peaks
 from sklearn.preprocessing import RobustScaler
-try:
-    from .config import *
-except ImportError:
-    from config import *
+
+from config import *
 
 # --------------------------------------------------------------------// Fonctions de préparation des données
 
@@ -18,38 +17,22 @@ PATH_MARKERS = "exp_markers.csv"
 # Paramètres respiration
 # ==============================================================================
 FS_BREATHING = 25.0
-FMIN, FMAX   = 0.05, 0.80
-MIN_DIST_S   = 1.5
-PROM_MIN     = 100
-PROM_OK      = 500
+FMIN, FMAX = 0.05, 0.80
+MIN_DIST_S = 1.5
+PROM_MIN = 100
+PROM_OK = 500
 
 # ==============================================================================
 # Fréquences capteurs
 # ==============================================================================
-SENSOR_FREQ = {
-    "chest_physiology_summary.csv": 1,
-    "wrist_acc.csv":                32,
-    "wrist_eda.csv":                4,
-    "wrist_hr.csv":                 1,
-    "wrist_ibi.csv":                0.59,
-    "wrist_skin_temperature.csv":   4,
-}
 
-TARGET_FREQ   = 1
+TARGET_FREQ = 4
 TARGET_PERIOD = 1000 / TARGET_FREQ  # ms
 
-# ==============================================================================
-# Colonnes
-# ==============================================================================
-FILE_COLS = {
-    "wrist_acc.csv": {"ax": "acc_x", "ay": "acc_y", "az": "acc_z"},
-    "wrist_eda.csv": {"eda": "eda"},
-    "wrist_hr.csv": {"hr": "wrist_hr"},
-    "wrist_ibi.csv": {"duration": "ibi"},
-    "wrist_skin_temperature.csv": {"temp": "temp"},
-}
 
-LABELS_OF_INTEREST = ["baseline", "activity", "fatigue"]
+
+keys_list = list(LABEL_MAP.keys())  # ["baseline", "activity", "fatigue"]
+
 
 def get_label_intervals(markers_path):
     """
@@ -70,7 +53,7 @@ def get_label_intervals(markers_path):
         ts = float(row["utcTime"])
         event = str(row["eventMarker"]).lower()
 
-        for lbl in LABELS_OF_INTEREST:
+        for lbl in keys_list:
             if f"start_{lbl}" in event:
                 active[lbl] = ts
             elif f"end_{lbl}" in event and lbl in active:
@@ -87,7 +70,6 @@ def get_label_intervals(markers_path):
     print(f"  ℹ t0 référence: {t0}")
     print("  ℹ Intervalles (relatif):", intervals_rel)
     return intervals_rel, t0
-
 
 
 # ==============================================================================
@@ -123,7 +105,6 @@ def resample_to_target_freq(df, native_freq, t_ref):
     df["timestamp"] = (df.index - pd.to_datetime(0, unit="ms")).total_seconds() * 1000
 
     return df.reset_index(drop=True)
-
 
 
 # ==============================================================================
@@ -163,7 +144,6 @@ def load_rename_resample(filenames, col_map, freq, t_ref):
         return None
 
 
-
 # ==============================================================================
 # 4. Breathing RPM
 # ==============================================================================
@@ -185,30 +165,29 @@ def compute_breathing_rpm(path, t_ref):
     sig = df["breathing_waveform"].values
 
     sig = sig - np.mean(sig)
-    b,a = butter(2, [FMIN, FMAX], btype="bandpass", fs=FS_BREATHING)
+    b, a = butter(2, [FMIN, FMAX], btype="bandpass", fs=FS_BREATHING)
     sig = filtfilt(b, a, sig)
 
     peaks, props = find_peaks(
-        sig,
-        distance=int(MIN_DIST_S * FS_BREATHING),
-        prominence=PROM_MIN
+        sig, distance=int(MIN_DIST_S * FS_BREATHING), prominence=PROM_MIN
     )
 
     rows = []
-    for i in range(len(peaks)-1):
-        dt = (peaks[i+1] - peaks[i]) / FS_BREATHING
+    for i in range(len(peaks) - 1):
+        dt = (peaks[i + 1] - peaks[i]) / FS_BREATHING
         rpm = 60 / dt
 
-        rows.append({
-            "timestamp": ts[peaks[i]],
-            "breathing_rpm": rpm,
-            "breathing_q": int(props["prominences"][i] >= PROM_OK)
-        })
+        rows.append(
+            {
+                "timestamp": ts[peaks[i]],
+                "breathing_rpm": rpm,
+                "breathing_q": int(props["prominences"][i] >= PROM_OK),
+            }
+        )
 
     df = pd.DataFrame(rows)
 
     return resample_to_target_freq(df, 0.5, t_ref)
-
 
 
 # ==============================================================================
@@ -217,21 +196,56 @@ def compute_breathing_rpm(path, t_ref):
 def assign_labels(df, intervals):
     """
     Assigne la colonne 'label' aux données resamplées en fonction des intervalles extraits.
-    Supprime les lignes ne correspondant à aucun label d'intérêt.
+
+    Comportement :
+      - Zones labelisées (baseline, activity, fatigue) → label assigné normalement.
+      - Zone entre 'activity' et 'fatigue' → label 'pre_fatigue' (classe 2).
+      - Zone entre 'baseline' et 'activity' → label 'unlabeled' (classe -1).
+      - Les données avant le premier intervalle ou après le dernier sont supprimées.
     """
-    """
-    Assigne la colonne 'label' aux données resamplées en fonction des intervalles extraits.
-    Supprime les lignes ne correspondant à aucun label d'intérêt.
-    """
+    df = df.copy()
     df["label"] = None
 
+    # 1. Assigner les labels des intervalles connus
     for s, e, l in intervals:
         mask = (df["timestamp"] >= s) & (df["timestamp"] <= e)
         df.loc[mask, "label"] = l
 
-    print("  ℹ labels trouvés:", df["label"].value_counts(dropna=False))
+    # 2. Identifier les bornes globales de la session
+    session_start = min(s for s, e, l in intervals)
+    session_end   = max(e for s, e, l in intervals)
 
-    return df.dropna(subset=["label"])
+    # Supprimer les données hors session (avant t0 ou après la fin)
+    df = df[(df["timestamp"] >= session_start) & (df["timestamp"] <= session_end)].copy()
+
+    # 3. Identifier les intervalles activity et fatigue pour déduire la zone pre_fatigue
+    activity_end = None
+    fatigue_start = None
+    for s, e, l in intervals:
+        if l == "activity":
+            activity_end = e
+        if l == "fatigue":
+            fatigue_start = s
+
+    # 4. Zone entre activity et fatigue → pre_fatigue (classe 2)
+    if activity_end is not None and fatigue_start is not None:
+        mask_pre_fatigue = (
+            (df["timestamp"] > activity_end)
+            & (df["timestamp"] < fatigue_start)
+            & (df["label"].isna())
+        )
+        df.loc[mask_pre_fatigue, "label"] = "pre_fatigue"
+        print(f"  ℹ pre_fatigue assigné : {mask_pre_fatigue.sum()} lignes")
+
+    # 5. Zone entre baseline et activity → unlabeled (classe -1)
+    mask_unlabeled = df["label"].isna()
+    df.loc[mask_unlabeled, "label"] = -1
+    print(f"  ℹ unlabeled assigné  : {mask_unlabeled.sum()} lignes")
+
+    print("  ℹ distribution labels :")
+    print(df["label"].value_counts(dropna=False).to_string())
+
+    return df
 
 
 def data_clean_1(path):
@@ -241,7 +255,7 @@ def data_clean_1(path):
       - Chargement et fusion des signaux (acc, eda, hr, ibi, temp) via merge_asof.
       - Ajout de la fréquence respiratoire.
       - Attribution des labels et filtrage des zones hors-label.
-    
+
     Retourne : Un DataFrame pandas consolidé.
     """
     """
@@ -250,7 +264,7 @@ def data_clean_1(path):
       - Chargement et fusion des signaux (acc, eda, hr, ibi, temp) via merge_asof.
       - Ajout de la fréquence respiratoire.
       - Attribution des labels et filtrage des zones hors-label.
-    
+
     Retourne : Un DataFrame pandas consolidé.
     """
     all_data = []
@@ -333,10 +347,9 @@ def data_clean_1(path):
 
             all_data.append(merged)
 
-
-# ==============================================================================
-# SAVE
-# ==============================================================================
+    # ==============================================================================
+    # SAVE
+    # ==============================================================================
 
     if all_data:
         df = pd.concat(all_data)
@@ -345,38 +358,129 @@ def data_clean_1(path):
         print("\n Toujours aucune donnée (vérifier timestamps)")
 
 
-
 # ==============================================================================
 # Fusion des données démographiques (age, gender) depuis metadata.csv
 # ==============================================================================
 
+
 def merge_demographics(df: pd.DataFrame, metadata_path=None) -> pd.DataFrame:
     """
-    Fusionne les colonnes 'age' et 'gender' depuis metadata.csv dans le dataset.
-      - Lecture de metadata.csv (colonnes: participant_id, age, gender, ...)
-      - Jointure sur la colonne 'participant'
-      - Mapping : 'Female' -> 0, 'Male' -> 1
-    Retourne : DataFrame avec colonnes 'age' (int) et 'gender' (0/1) ajoutées.
+    Fusionne les colonnes 'age', 'gender' et les autres colonnes de questionnaires/métadonnées
+    depuis metadata.csv dans le dataset.
+      - Lecture de metadata.csv
+      - Nettoyage des noms de colonnes et des valeurs textuelles
+      - Mapping/encodage des variables qualitatives en valeurs numériques
+      - Jointure sur la colonne 'participant' (zfill(2))
+    Retourne : DataFrame avec toutes les colonnes fusionnées.
     """
-    meta = pd.read_csv(metadata_path, dtype={"participant_id": str})
+    if metadata_path is None:
+        metadata_path = METADATA_PATH
 
-    # Mapping Female -> 0, Male -> 1
-    meta["gender"] = meta["gender"].map({"Female": 0, "Male": 1})
+    meta = pd.read_csv(metadata_path)
+    
+    # Nettoyage des noms de colonnes (suppression des espaces blancs autour des noms)
+    meta.columns = meta.columns.str.strip()
 
-    meta = meta.rename(columns={"participant_id": COL_PARTICIPANT})[
-        [COL_PARTICIPANT, "age", "gender"]
+    # Création de la colonne participant avec padding (ex: 1 -> '01') pour correspondre aux dossiers
+    meta[COL_PARTICIPANT] = meta["ID"].astype(str).str.zfill(2)
+
+    # Encodage de gender (Female -> 0, Male -> 1)
+    meta["gender"] = meta["gender"].astype(str).str.strip().str.lower().map({"female": 0, "male": 1})
+
+    # Encodage des colonnes Likert (personnalité)
+    likert_cols = [
+        "reserved",
+        "generally_trusting",
+        "lazy",
+        "relaxed_handless_stress",
+        "few_artistic_interests",
+        "sociable",
+        "criticize_others",
+        "thorough_job",
+        "easily_nervous",
+        "active_magination",
     ]
+    likert_mapping = {
+        "disagree strongly": 1,
+        "disagree a little": 2,
+        "neither agree nor disagree": 3,
+        "agree a little": 4,
+        "agree strongly": 5
+    }
+    for col in likert_cols:
+        if col in meta.columns:
+            meta[col] = meta[col].astype(str).str.strip().str.lower().map(likert_mapping)
+
+    # Encodage des colonnes de condition physique (fitness)
+    fitness_cols = [
+        "phisical_fitness",
+        "cardiorespiratory_fitness",
+        "muscular_strength",
+        "agility_speed",
+        "flexibility",
+    ]
+    fitness_mapping = {
+        "very poor": 1,
+        "poor": 2,
+        "average": 3,
+        "good": 4,
+        "very good": 5
+    }
+    for col in fitness_cols:
+        if col in meta.columns:
+            meta[col] = meta[col].astype(str).str.strip().str.lower().map(fitness_mapping)
+
+    # Encodage des conditions de santé cardiovasculaire (No -> 0, Yes -> 1)
+    yes_no_mapping = {"no": 0, "yes": 1}
+    if "cardiovascular_health_conditions" in meta.columns:
+        meta["cardiovascular_health_conditions"] = (
+            meta["cardiovascular_health_conditions"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .map(yes_no_mapping)
+        )
+
+    # Sélection des colonnes à fusionner
+    columns_to_merge = [
+        COL_PARTICIPANT,
+        "age",
+        "gender",
+        "reserved",
+        "generally_trusting",
+        "lazy",
+        "relaxed_handless_stress",
+        "few_artistic_interests",
+        "sociable",
+        "criticize_others",
+        "thorough_job",
+        "easily_nervous",
+        "active_magination",
+        "phisical_fitness",
+        "cardiorespiratory_fitness",
+        "muscular_strength",
+        "agility_speed",
+        "flexibility",
+        "cardiovascular_health_conditions"
+    ]
+    
+    # Filtrer les colonnes existantes au cas où certaines manqueraient dans le CSV
+    columns_to_merge = [c for c in columns_to_merge if c in meta.columns]
+
+    meta = meta[columns_to_merge]
 
     df = df.merge(meta, on=COL_PARTICIPANT, how="left")
 
-    print(f"✔ Démographiques fusionnés | age/gender (encoded) ajoutés pour {meta.shape[0]} participants")
+    print(
+        f"✔ Démographiques et métadonnées fusionnés | {len(columns_to_merge) - 1} colonnes ajoutées pour {meta.shape[0]} participants"
+    )
     return df
-
 
 
 # ==============================================================================
 # visualition des données trouvé de data_clean_1
 # ==============================================================================
+
 
 def visualize_data(df):
     """
@@ -390,11 +494,9 @@ def visualize_data(df):
     statistiques par session/participant, continuité temporelle et corrélations.
     """
 
-
-# ==============================================================================
-# Noms réels des colonnes
-# ==============================================================================
-
+    # ==============================================================================
+    # Noms réels des colonnes
+    # ==============================================================================
 
     print("=" * 70)
     print("1. INFORMATIONS GÉNÉRALES")
@@ -447,10 +549,9 @@ def visualize_data(df):
     print(f"\nTimestamps dupliqués          : {n_dup_ts}")
     print(f"Pourcentage                   : {n_dup_ts / len(df) * 100:.2f}%")
 
-
-# ==============================================================================
-# Investiguer les timestamps dupliqués
-# ==============================================================================
+    # ==============================================================================
+    # Investiguer les timestamps dupliqués
+    # ==============================================================================
 
     print(f"\n--- Analyse des timestamps dupliqués ---")
     dup_ts = df[df.duplicated(subset=[COL_TIMESTAMP], keep=False)]
@@ -590,8 +691,12 @@ def visualize_data(df):
     print("13. STATISTIQUES PAR LABEL")
     print("=" * 70)
     for lbl in df[COL_LABEL].unique():
-        print(f"\n--- Label : {lbl.upper()} ---")
-        subset = df[df[COL_LABEL] == lbl][NUM_COLS]
+        if lbl is None or (isinstance(lbl, float) and pd.isna(lbl)):
+            print(f"\n--- Label : NaN (unlabeled - zone entre baseline et activity) ---")
+            subset = df[df[COL_LABEL].isna()][NUM_COLS]
+        else:
+            print(f"\n--- Label : {str(lbl).upper()} ---")
+            subset = df[df[COL_LABEL] == lbl][NUM_COLS]
         print(subset.describe().T[["mean", "std", "min", "max"]].round(3).to_string())
 
     print("\n" + "=" * 70)
@@ -666,9 +771,10 @@ def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:
     print(f"✔ NaN traités : {nan_before} → {df[SIGNAL_COLS].isna().sum().sum()}")
 
     # 1.3 ── Log transform EDA ────────────────────────────────────────────
-    skew_before = df["eda"].skew()
-    df["eda"] = np.log1p(df["eda"])
-    print(f"✔ EDA log1p | asymétrie : {skew_before:.3f} → {df['eda'].skew():.3f}")
+    if "eda" in df.columns:
+        skew_before = df["eda"].skew()
+        df["eda"] = np.log1p(df["eda"])
+        print(f"✔ EDA log1p | asymétrie : {skew_before:.3f} → {df['eda'].skew():.3f}")
 
     # 1.4 ── Tri participant / session ────────────────────────────────────
     df = df.sort_values(
@@ -680,10 +786,10 @@ def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-
 # ==============================================================================
 # Suppression des doublons
 # ==============================================================================
+
 
 def remove_duplicates(df: pd.DataFrame, keep: str = "first") -> pd.DataFrame:
     """
@@ -726,11 +832,12 @@ def remove_duplicates(df: pd.DataFrame, keep: str = "first") -> pd.DataFrame:
     return df
 
 
-# ── Label encodé : baseline=-1 | activity=0 | fatigue=1  et Séparation X / y─────────────────────────────────────────
+# ── Label encodé : baseline=0 | activity=1 | pre_fatigue=2 | fatigue=3  et Séparation X / y─────────────────────
 def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """
     Encode le label et sépare features / target :
-      - baseline → -1  |  activity → 0  |  fatigue → 1
+      - baseline → 0  |  activity → 1  |  pre_fatigue → 2  |  fatigue → 3
+      - La zone baseline↔activity reste à -1 pour le semi-supervisé.
       - Encodage dans la colonne 'label' (pas de colonne séparée)
       - Conversion float32 pour compatibilité STM32H7 (FPU 32-bit)
     Retourne : (X, y)
@@ -743,18 +850,33 @@ def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
 
     df = df.copy()
 
-    # 2.1 ── Encoder le label ─────────────────────────────────────────────
-    unknown = set(df[COL_LABEL].unique()) - set(LABEL_MAP.keys())
+    # 2.1 ── Écarter seulement les vrais labels manquants ──────────────
+    n_unlabeled = df[COL_LABEL].isna().sum()
+    if n_unlabeled > 0:
+        print(f"⚠ {n_unlabeled} lignes avec label NaN écartées de X/y")
+    df = df.dropna(subset=[COL_LABEL]).copy()
+
+    # 2.2 ── Encoder le label ────────────────────────────────────────────────────────────────────────────────────
+    known_labels = set(LABEL_MAP.keys()) | {-1}
+    unknown = set(df[COL_LABEL].unique()) - known_labels
     if unknown:
-        print(f"⚠ Labels inconnus : {unknown}")
+        print(f"⚠ Labels inconnus (seront écartés) : {unknown}")
 
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAP)
+    df[COL_LABEL] = df[COL_LABEL].replace(LABEL_MAP)
 
-    print(f"✔ Label encodé : baseline=-1 | activity=0 | fatigue=1")
+    # Écarter les lignes dont le label n’était pas dans LABEL_MAP ou -1
+    valid_encoded_labels = set(LABEL_MAP.values()) | {-1}
+    mask_unknown = ~df[COL_LABEL].isin(valid_encoded_labels)
+    n_unknown = mask_unknown.sum()
+    if n_unknown > 0:
+        print(f"⚠ {n_unknown} lignes avec label inconnu écartées après mapping")
+        df = df.loc[~mask_unknown].copy()
+
+    print(f"✔ Label encodé : baseline=0 | activity=1 | pre_fatigue=2 | fatigue=3")
     print(f"\n   Distribution :")
     print(df[COL_LABEL].value_counts().sort_index().to_string())
 
-    # 2.2 ── Séparation X / y ─────────────────────────────────────────────
+    # 2.3 ── Séparation X / y ───────────────────────────────────────────────────────────────────────────────────
     X = df[SIGNAL_COLS].astype(np.float32)  # float32 → STM32H7 FPU natif
     y = df[COL_LABEL].astype(np.int8)  # int8    → économie mémoire
 
@@ -764,10 +886,10 @@ def encode_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 
-
 # ==============================================================================
 # RobustScaler (robuste aux outliers, Q1/Q3)
 # ==============================================================================
+
 
 def normalize_features(
     X: pd.DataFrame, scaler: RobustScaler = None, fit: bool = True
@@ -803,10 +925,10 @@ def normalize_features(
     return X, scaler
 
 
-
 # ==============================================================================
 # Conversion float64 → float32
 # ==============================================================================
+
 
 def reduce_precision(df):
     """

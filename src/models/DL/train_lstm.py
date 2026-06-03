@@ -64,8 +64,8 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
 MODEL_NAME        = "LSTM"
-LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
-TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
+LABEL_MAPPING     = {0: 0, 1: 1, 2: 2, 3: 3}
+TARGET_NAMES      = ["baseline", "activity", "pre_fatigue", "fatigue"]
 N_OPTUNA_SESSIONS = 11       # sessions tirées au hasard pour évaluer chaque trial Optuna
 
 OPTUNA_SPACE = {
@@ -504,19 +504,22 @@ def main():
         return print(f"❌ Dataset non trouvé : {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
+    df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
+    df_labeled = df[df[COL_LABEL] >= 0].copy()
+    df_unlabeled = df[df[COL_LABEL] == -1].copy()
+    print(f"Labeled: {len(df_labeled)} lignes | Unlabeled: {len(df_unlabeled)} lignes")
 
     unique_sessions = [
         tuple(x) for x in
-        df[df[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
+        df_labeled[df_labeled[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
     ]
     num_classes = len(LABEL_MAPPING)
 
     if USE_OPTUNA_LSTM:
-        best_params, val_sessions = optimize_hyperparams(df, num_classes)
+        best_params, val_sessions = optimize_hyperparams(df_labeled, num_classes)
     else:
         best_params = MODEL_PARAMS["LSTM"]
-        all_sess = [tuple(x) for x in df[[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values]
+        all_sess = [tuple(x) for x in df_labeled[[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values]
         import random as _random
         val_sessions = _random.sample(all_sess, min(N_OPTUNA_SESSIONS, len(all_sess)))
 
@@ -529,8 +532,8 @@ def main():
         config = WINDOW_CONFIGS.get(test_part, WINDOW_CONFIGS["default"])
         W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
 
-        df_pool = df[~((df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess))].copy()
-        df_test = df[ (df[COL_PARTICIPANT] == test_part)  & (df[COL_SESSION] == test_sess)].copy()
+        df_pool = df_labeled[~((df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess))].copy()
+        df_test = df_labeled[ (df_labeled[COL_PARTICIPANT] == test_part)  & (df_labeled[COL_SESSION] == test_sess)].copy()
 
         pool_sessions      = [tuple(x) for x in df_pool[[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values]
         val_part, val_sess = random.choice(pool_sessions)

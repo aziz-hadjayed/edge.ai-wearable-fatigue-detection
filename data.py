@@ -33,8 +33,11 @@ if __name__ == "__main__":
     # ── Sauvegarde ────────────────────────────────────────────────────────
     OUTPUT_PATH_NO_SMOTE.parent.mkdir(parents=True, exist_ok=True)
 
-    df_meta = df[[COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP]].reset_index(drop=True)
-    df_final = pd.concat([df_meta, X, y.rename(COL_LABEL)], axis=1)
+    # Réaligner df_meta sur l'index de X (qui a été filtré dans encode_features)
+    df_meta = df.loc[X.index, [COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP]].reset_index(drop=True)
+    X_reset = X.reset_index(drop=True)
+    y_reset = y.reset_index(drop=True)
+    df_final = pd.concat([df_meta, X_reset, y_reset.rename(COL_LABEL)], axis=1)
     df_final.to_csv(OUTPUT_PATH_NO_SMOTE, index=False)
     # ── Résumé ────────────────────────────────────────────────────────────
     print("\n" + "=" * 60)

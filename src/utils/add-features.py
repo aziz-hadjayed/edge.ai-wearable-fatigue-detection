@@ -8,18 +8,20 @@ Extraction features PPG + Génération ambiant synchronisé
 - Output: features_ppg_ear_(left/right).csv + ambient_grandeur.csv
 """
 
-import os
 import csv
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
+
+import numpy as np
+import pandas as pd
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # METEOSTAT (optionnel)
 # ═══════════════════════════════════════════════════════════════════════════════
 try:
-    from meteostat import Point, Hourly
+    from meteostat import Hourly, Point
+
     METEOSTAT_AVAILABLE = True
 except ImportError:
     METEOSTAT_AVAILABLE = False
@@ -35,7 +37,7 @@ CAMBRIDGE_ELEVATION = 6
 # CONFIGURATION PPG
 # ═══════════════════════════════════════════════════════════════════════════════
 BASE_PATH = "/media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/data/01_raw"
-EAR_SIDE = "left"
+EAR_SIDE = "right"
 
 FS = 100.0
 WINDOW_SAMPLES = 2000
@@ -49,6 +51,7 @@ EPS = 1e-6
 # ═══════════════════════════════════════════════════════════════════════════════
 # FONCTIONS AMBIANT (NOUVEAU)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def fetch_meteo_two_hours(session_datetime):
     """Récupère température et humidité aux heures H et H+1."""
@@ -65,8 +68,10 @@ def fetch_meteo_two_hours(session_datetime):
         if len(data) < 2:
             return None
         return {
-            'temp0': data['temp'].iloc[0], 'temp1': data['temp'].iloc[1],
-            'hum0': data['rhum'].iloc[0], 'hum1': data['rhum'].iloc[1]
+            "temp0": data["temp"].iloc[0],
+            "temp1": data["temp"].iloc[1],
+            "hum0": data["rhum"].iloc[0],
+            "hum1": data["rhum"].iloc[1],
         }
     except Exception as e:
         print(f"    [WARN] API Meteostat: {e}")
@@ -99,16 +104,42 @@ def generate_ambient_synced(session_id, session_datetime, timestamp_ref, seed=No
 
     if meteo:
         # Interpolation linéaire sur timestamps exacts
-        temp_base = meteo['temp0'] + (meteo['temp1'] - meteo['temp0']) * (t_seconds / 3600.0)
-        hum_base = meteo['hum0'] + (meteo['hum1'] - meteo['hum0']) * (t_seconds / 3600.0)
+        # On calcule la fraction de l'heure écoulée depuis le début de l'heure
+        hour_h = session_datetime.replace(minute=0, second=0, microsecond=0)
+        t_fraction = (t_seconds - hour_h.timestamp()) / 3600.0
+        
+        temp_base = meteo["temp0"] + (meteo["temp1"] - meteo["temp0"]) * t_fraction
+        hum_base = meteo["hum0"] + (meteo["hum1"] - meteo["hum0"]) * t_fraction
     else:
-        # Valeurs par défaut
-        temp_base = np.full(n_points, 45.0)
-        hum_base = np.full(n_points, 65.0)
+        # Valeurs par défaut réalistes et dynamiques (si météo non disponible)
+        # On extrait le numéro de la session à la fin du session_id (ex: "P01_S01" -> 1)
+        session_idx = 1
+        try:
+            if "_" in session_id:
+                parts = session_id.split("_")
+                for p in parts:
+                    if p.startswith("S") and p[1:].isdigit():
+                        session_idx = int(p[1:])
+            elif session_id[-1].isdigit():
+                session_idx = int(session_id[-1])
+        except Exception:
+            pass
+
+        # Température et humidité réalistes avec dérives fluides au cours de la session
+        temp_start = 20.0 + (session_idx - 1) * 0.5
+        temp_end = temp_start + 0.8
+        hum_start = 50.0 + (session_idx - 1) * 2.0
+        hum_end = hum_start - 3.0
+
+        t_relative = t_seconds - t_seconds[0]
+        duration_hours = (t_seconds[-1] - t_seconds[0]) / 3600.0 if n_points > 1 else 1.0
+
+        temp_base = temp_start + (temp_end - temp_start) * (t_relative / (duration_hours * 3600.0))
+        hum_base = hum_start + (hum_end - hum_start) * (t_relative / (duration_hours * 3600.0))
 
     # BRUIT RÉALISTE
     noise_temp = np.random.normal(0, 0.05, n_points)  # ±0.1°C subtil
-    noise_hum  = np.random.normal(0, 0.2, n_points)   # ±0.4% subti
+    noise_hum = np.random.normal(0, 0.4, n_points)  # ±0.4% subtil
 
     cycle_clim = 0.5 * np.sin(2 * np.pi * t_seconds / 900)  # ±0.1°C, 15min
 
@@ -121,21 +152,25 @@ def generate_ambient_synced(session_id, session_datetime, timestamp_ref, seed=No
         width = np.random.randint(120, 240)
         amplitude = np.random.choice([-1, 1]) * np.random.uniform(0.2, 0.4)
         x = np.arange(n_points)
-        perturbation_temp += amplitude * np.exp(-0.5 * ((x - center_idx) / (width/4))**2)
+        perturbation_temp += amplitude * np.exp(
+            -0.5 * ((x - center_idx) / (width / 4)) ** 2
+        )
 
     # Assemblage
-    temperature_amb = temp_base + noise_temp + perturbation_temp #+ cycle_clim
-    humidite_amb = hum_base+ noise_hum# - 0.5 * (temperature_amb - temp_base)
+    temperature_amb = temp_base + noise_temp + perturbation_temp  # + cycle_clim
+    humidite_amb = hum_base + noise_hum  # - 0.5 * (temperature_amb - temp_base)
 
     # Contraintes physiques
     temperature_amb = np.clip(temperature_amb, 15.0, 25.0)
     humidite_amb = np.clip(humidite_amb, 30.0, 90.0)
 
-    df_ambient = pd.DataFrame({
-        'timestamp': timestamp_ref.astype(int),
-        'temperature_amb': np.round(temperature_amb, 3),
-        'humidite_amb': np.round(humidite_amb, 2)
-    })
+    df_ambient = pd.DataFrame(
+        {
+            "timestamp": timestamp_ref.astype(int),
+            "temperature_amb": np.round(temperature_amb, 3),
+            "humidite_amb": np.round(humidite_amb, 2),
+        }
+    )
 
     return df_ambient
 
@@ -143,6 +178,7 @@ def generate_ambient_synced(session_id, session_datetime, timestamp_ref, seed=No
 # ═══════════════════════════════════════════════════════════════════════════════
 # FONCTIONS PPG (INCHANGÉES)
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def detect_peaks(sig: np.ndarray) -> np.ndarray:
     if len(sig) < 10:
@@ -153,8 +189,10 @@ def detect_peaks(sig: np.ndarray) -> np.ndarray:
     threshold = mean_val + PEAK_THRESHOLD * (max_val - mean_val)
 
     is_peak = (
-        (sig[2:-2] > sig[1:-3]) & (sig[2:-2] > sig[3:-1]) &
-        (sig[2:-2] > sig[0:-4]) & (sig[2:-2] > sig[4:])
+        (sig[2:-2] > sig[1:-3])
+        & (sig[2:-2] > sig[3:-1])
+        & (sig[2:-2] > sig[0:-4])
+        & (sig[2:-2] > sig[4:])
     )
     candidates = np.where(is_peak)[0] + 2
 
@@ -193,7 +231,7 @@ def calc_rmssd(rr: np.ndarray) -> float:
     if len(rr) < 2:
         return 0.0
     diffs = np.diff(rr)
-    return float(np.sqrt(np.mean(diffs ** 2)))
+    return float(np.sqrt(np.mean(diffs**2)))
 
 
 def calc_pnn50(rr: np.ndarray) -> float:
@@ -252,19 +290,21 @@ def calc_skewness(sig: np.ndarray) -> float:
         return 0.0
 
     centered = sig - np.mean(sig)
-    sum2 = np.sum(centered ** 2)
-    sum3 = np.sum(centered ** 3)
+    sum2 = np.sum(centered**2)
+    sum3 = np.sum(centered**3)
     variance = sum2 / len(sig)
     std_dev = np.sqrt(variance)
 
     if std_dev < EPS:
         return 0.0
 
-    skew = (sum3 / len(sig)) / (std_dev ** 3)
+    skew = (sum3 / len(sig)) / (std_dev**3)
     return float(np.clip(skew, -3.0, 3.0))
 
 
-def extract_window_features(sig_ir: np.ndarray, sig_red: np.ndarray) -> Dict[str, float]:
+def extract_window_features(
+    sig_ir: np.ndarray, sig_red: np.ndarray
+) -> Dict[str, float]:
     peaks = detect_peaks(sig_ir)
     rr = calc_rr(peaks)
 
@@ -301,49 +341,63 @@ CSV_HEADER = [
 # FONCTION: RÉCUPÉRER DATETIME SESSION (À ADAPTER)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def get_session_datetime(participant_id: str, session_id: str) -> datetime:
+
+def get_session_datetime(participant_id: str, session_id: str, first_timestamp: float = None) -> datetime:
     """
     Récupère la date/heure réelle de la session.
 
     À ADAPTER selon votre structure de données:
+    - Option 0: Utiliser le timestamp du premier échantillon
     - Option 1: Lire metadata.json
     - Option 2: Extraire du nom de fichier
     - Option 3: Base de données externe
 
     Par défaut: génère datetime fictive (À REMPLACER !)
     """
+    # Option 0: Utiliser le premier timestamp en millisecondes s'il est fourni
+    if first_timestamp is not None:
+        return datetime.fromtimestamp(first_timestamp / 1000.0, tz=timezone.utc)
+
     # Option 1: metadata.json
     metadata_path = os.path.join(BASE_PATH, participant_id, session_id, "metadata.json")
     if os.path.exists(metadata_path):
         import json
+
         with open(metadata_path) as f:
             meta = json.load(f)
-            if 'datetime' in meta:
-                return datetime.fromisoformat(meta['datetime'])
+            if "datetime" in meta:
+                dt = datetime.fromisoformat(meta["datetime"])
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
 
     # Option 2: fichier timestamp_ref.csv
     ts_path = os.path.join(BASE_PATH, participant_id, session_id, "session_info.csv")
     if os.path.exists(ts_path):
         df_info = pd.read_csv(ts_path)
-        if 'datetime' in df_info.columns:
-            return datetime.fromisoformat(df_info['datetime'].iloc[0])
+        if "datetime" in df_info.columns:
+            dt = datetime.fromisoformat(df_info["datetime"].iloc[0])
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
 
     # FALLBACK (À REMPLACER PAR VOTRE LOGIQUE RÉELLE)
     day = int(participant_id)
     hour = 9 + (int(session_id) - 1) * 3
-    return datetime(2024, 3, 15 + day - 1, hour, 0, 0)
+    return datetime(2024, 3, 15 + day - 1, hour, 0, 0, tzinfo=timezone.utc)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PIPELINE PRINCIPAL - 36 SESSIONS + AMBIANT SYNCHRONISÉ
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def main():
     print("=" * 70)
     print("EXTRACTION PPG + GÉNÉRATION AMBIANT SYNCHRONISÉ")
     print("=" * 70)
     print(f"Oreille: {EAR_SIDE.upper()} | Fréquence PPG: {FS} Hz")
-    print(f"Fenêtre: {WINDOW_SAMPLES/FS}s | Step: {STEP_SAMPLES/FS}s")
+    print(f"Fenêtre: {WINDOW_SAMPLES / FS}s | Step: {STEP_SAMPLES / FS}s")
     print("-" * 70)
 
     total_sessions = 0
@@ -368,17 +422,27 @@ def main():
 
             print(f"\n[{session_full_id}] Traitement...")
 
-            # ─── LECTURE PPG ─────────────────────────────────
-            ppg_file = os.path.join(session_path, f"ear_ppg_{EAR_SIDE}.csv")
+            # ─── LECTURE PPG (Avec support des shards/fichiers multiples) ───
+            import glob
+            ppg_pattern = os.path.join(session_path, f"ear_ppg_{EAR_SIDE}*.csv")
+            ppg_files = sorted(glob.glob(ppg_pattern))
 
-            if not os.path.exists(ppg_file):
-                print(f"  [SKIP] PPG manquant: {ppg_file}")
+            if not ppg_files:
+                print(f"  [SKIP] PPG manquant: {ppg_pattern}")
                 continue
 
             try:
-                df_ppg = pd.read_csv(ppg_file)
+                dfs = []
+                for pf in ppg_files:
+                    dfs.append(pd.read_csv(pf))
+                df_ppg = pd.concat(dfs, ignore_index=True)
+                
+                # Nettoyage et tri par timestamp
+                df_ppg.columns = df_ppg.columns.str.strip().str.lower()
+                df_ppg["timestamp"] = pd.to_numeric(df_ppg["timestamp"], errors="coerce")
+                df_ppg = df_ppg.dropna(subset=["timestamp"]).sort_values("timestamp").drop_duplicates(subset=["timestamp"]).reset_index(drop=True)
             except Exception as e:
-                print(f"  [ERR] Lecture PPG: {e}")
+                print(f"  [ERR] Lecture/Fusion PPG shards: {e}")
                 continue
 
             required_cols = ["timestamp", "green", "ir", "red"]
@@ -391,16 +455,20 @@ def main():
             sig_ir = df_ppg["ir"].values
             sig_red = df_ppg["red"].values
 
-            print(f"  → PPG: {len(timestamps)} points | ts={timestamps[0]}→{timestamps[-1]}ms")
+            print(
+                f"  → PPG: {len(timestamps)} points (fusion de {len(ppg_files)} shards) | ts={timestamps[0]}→{timestamps[-1]}ms"
+            )
 
             # ─── GÉNÉRATION AMBIANT (SYNCHRONISÉ) ────────────
-            session_dt = get_session_datetime(participant_id, session_num)
+            session_dt = get_session_datetime(
+                participant_id, session_num, first_timestamp=timestamps[0]
+            )
             print(f"  → Session datetime: {session_dt.strftime('%Y-%m-%d %H:%M')}")
 
             df_ambient = generate_ambient_synced(
                 session_id=session_full_id,
                 session_datetime=session_dt,
-                timestamp_ref=timestamps  # ← SYNCHRONISÉ AVEC PPG
+                timestamp_ref=timestamps,  # ← SYNCHRONISÉ AVEC PPG
             )
 
             if df_ambient is not None:
@@ -411,8 +479,12 @@ def main():
                 df_ambient.to_csv(ambient_path, index=False)
 
                 print(f"  ✓ Ambiant: {ambient_path}")
-                print(f"    Temp: {df_ambient['temperature_amb'].mean():.2f}°C (±{df_ambient['temperature_amb'].std():.2f})")
-                print(f"    Hum:  {df_ambient['humidite_amb'].mean():.1f}% (±{df_ambient['humidite_amb'].std():.1f})")
+                print(
+                    f"    Temp: {df_ambient['temperature_amb'].mean():.2f}°C (±{df_ambient['temperature_amb'].std():.2f})"
+                )
+                print(
+                    f"    Hum:  {df_ambient['humidite_amb'].mean():.1f}% (±{df_ambient['humidite_amb'].std():.1f})"
+                )
                 total_ambient += 1
 
             # ─── FENÊTRAGE PPG ───────────────────────────────
@@ -437,15 +509,10 @@ def main():
                     window_timestamp = timestamps[start]
 
                     feats = extract_window_features(
-                        sig_ir[start:end],
-                        sig_red[start:end]
+                        sig_ir[start:end], sig_red[start:end]
                     )
 
-                    row = {
-                        "timestamp": window_timestamp,
-                        "window_id": w,
-                        **feats
-                    }
+                    row = {"timestamp": window_timestamp, "window_id": w, **feats}
                     writer.writerow(row)
 
             total_sessions += 1

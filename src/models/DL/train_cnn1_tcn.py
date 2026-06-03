@@ -38,7 +38,6 @@ if gpus:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from config import *
 
-from imblearn.over_sampling import SMOTE
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score
 from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
@@ -51,6 +50,7 @@ from tensorflow.keras.optimizers import Adam, RMSprop
 from tensorflow.keras.regularizers import l2
 from keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
+from models.semi_supervised import add_pseudo_labels
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -58,9 +58,8 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 # 2. CONSTANTES
 # ══════════════════════════════════════════════════════════════════════
 MODEL_NAME        = "CNN_TCN"
-LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
-TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
-USE_SMOTE         = True    # rééquilibrage SMOTE sur X_fit uniquement
+LABEL_MAPPING     = {0: 0, 1: 1, 2: 2, 3: 3}
+TARGET_NAMES      = ["baseline", "activity", "pre_fatigue", "fatigue"]
 N_OPTUNA_SESSIONS = 20      # sessions tirées au hasard pour évaluer chaque trial Optuna
 
 # Budget Flash STM32 pour TFLite INT8
@@ -194,7 +193,7 @@ def plot_fold(history, fold_idx, test_part, test_sess, save_dir,
     print(f"  Courbes sauvegardées : {plot_path}")
 
 # ══════════════════════════════════════════════════════════════════════
-# 6. DONNÉES — fenêtrage + SMOTE + pré-calcul Optuna
+# 6. DONNÉES — fenêtrage
 # ══════════════════════════════════════════════════════════════════════
 def extract_windows(group_df, window_size, step_size):
     X = group_df[SIGNAL_COLS].values
@@ -216,20 +215,6 @@ def extract_all_windows(df, window_size, step_size):
         X_all.extend(wx); y_all.extend(wy)
     return np.array(X_all), np.array(y_all)
 
-def apply_smote(X, y, label="fit"):
-    n_samples, timesteps, n_features = X.shape
-    unique, counts = np.unique(y, return_counts=True)
-    k = min(5, counts.min() - 1)
-    if k < 1:
-        print(f"  SMOTE [{label}] ignoré — classe trop petite ({counts.min()} samples)")
-        return X, y
-    print(f"  SMOTE [{label}] avant : { {int(u): int(c) for u, c in zip(unique, counts)} }")
-    X_res, y_res = SMOTE(k_neighbors=k, random_state=42).fit_resample(
-        X.reshape(n_samples, -1), y
-    )
-    unique2, counts2 = np.unique(y_res, return_counts=True)
-    print(f"  SMOTE [{label}] après : { {int(u): int(c) for u, c in zip(unique2, counts2)} }")
-    return X_res.reshape(-1, timesteps, n_features), y_res
 
 def precompute_session_windows(df, window_size, step_size):
     """Pré-extrait les fenêtres brutes (float16) par session — une seule fois pour Optuna."""
@@ -418,7 +403,7 @@ def optimize_hyperparams(df, num_classes, n_trials=100, n_optuna_epochs=10):
 # ══════════════════════════════════════════════════════════════════════
 # 9. MODÈLE GLOBAL
 # ══════════════════════════════════════════════════════════════════════
-def train_global_model(df, best_params, num_classes):
+def train_global_model(df_labeled, best_params, num_classes):
     print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
     config = WINDOW_CONFIGS["default"]
     W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
@@ -428,9 +413,6 @@ def train_global_model(df, best_params, num_classes):
     df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
     X_all, y_all = extract_all_windows(df_all, W_SIZE, S_SIZE)
     del df_all; gc.collect()
-
-    if USE_SMOTE:
-        X_all, y_all = apply_smote(X_all, y_all, label="global")
     print(f"  Fenêtres totales : {len(X_all)}")
 
     model = None
@@ -472,17 +454,20 @@ def main():
         return print(f"❌ Dataset non trouvé : {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
+    df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
+    df_labeled = df[df[COL_LABEL] >= 0].copy()
+    df_unlabeled = df[df[COL_LABEL] == -1].copy()
+    print(f"Labeled: {len(df_labeled)} lignes | Unlabeled: {len(df_unlabeled)} lignes")
 
     unique_sessions = [
         tuple(x) for x in
-        df[df[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
+        df_labeled[df_labeled[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
     ]
     num_classes = len(LABEL_MAPPING)
     print(f"Sessions détectées : {len(unique_sessions)}")
 
     best_params = (
-        optimize_hyperparams(df, num_classes)
+        optimize_hyperparams(df_labeled, num_classes)
         if USE_OPTUNA_CNN_TCN
         else MODEL_PARAMS["CNN_TCN"]
     )
@@ -496,8 +481,8 @@ def main():
         config = WINDOW_CONFIGS.get(test_part, WINDOW_CONFIGS["default"])
         W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
 
-        df_pool = df[~((df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess))].copy()
-        df_test = df[ (df[COL_PARTICIPANT] == test_part)  & (df[COL_SESSION] == test_sess)].copy()
+        df_pool = df_labeled[~((df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess))].copy()
+        df_test = df_labeled[ (df_labeled[COL_PARTICIPANT] == test_part)  & (df_labeled[COL_SESSION] == test_sess)].copy()
 
         pool_sessions      = [tuple(x) for x in df_pool[[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values]
         val_part, val_sess = random.choice(pool_sessions)
@@ -510,10 +495,15 @@ def main():
         df_fit[SIGNAL_COLS]  = scaler.fit_transform(df_fit[SIGNAL_COLS])
         df_val[SIGNAL_COLS]  = scaler.transform(df_val[SIGNAL_COLS])
         df_test[SIGNAL_COLS] = scaler.transform(df_test[SIGNAL_COLS])
+        df_unlabeled_fit = df_unlabeled.copy()
+        if len(df_unlabeled_fit) > 0:
+            df_unlabeled_fit[SIGNAL_COLS] = scaler.transform(df_unlabeled_fit[SIGNAL_COLS])
+
 
         X_fit,  y_fit  = extract_all_windows(df_fit,  W_SIZE, S_SIZE)
         X_val,  y_val  = extract_all_windows(df_val,  W_SIZE, S_SIZE)
         X_test, y_test = extract_all_windows(df_test, W_SIZE, S_SIZE)
+        X_unlabeled, _ = extract_all_windows(df_unlabeled_fit, W_SIZE, S_SIZE) if len(df_unlabeled_fit) > 0 else (np.array([]), np.array([]))
 
         if len(X_test) == 0:
             print(f"  WARNING: test vide pour P{test_part}. Skip."); continue
@@ -521,13 +511,8 @@ def main():
             print(f"  WARNING: val vide pour P{val_part}. Skip.");   continue
 
         print(f"  Fit: {len(X_fit)} | Val: {len(X_val)} | Test: {len(X_test)} fenêtres")
-
-        if USE_SMOTE:
-            X_fit, y_fit = apply_smote(X_fit, y_fit, label=f"fold{test_idx+1}")
-            weight_dict  = None
-        else:
-            w           = compute_class_weight("balanced", classes=np.unique(y_fit), y=y_fit)
-            weight_dict = dict(enumerate(w))
+        w           = compute_class_weight("balanced", classes=np.unique(y_fit), y=y_fit)
+        weight_dict = dict(zip(np.unique(y_fit), w))
 
         model = None
         try:
@@ -545,6 +530,26 @@ def main():
                 class_weight=weight_dict,
                 verbose=1,
             )
+
+            X_fit_v2, y_fit_v2, pseudo_y, _ = add_pseudo_labels(model, X_fit, y_fit, X_unlabeled)
+            if len(pseudo_y) > 0:
+                w_v2 = compute_class_weight("balanced", classes=np.unique(y_fit_v2), y=y_fit_v2)
+                weight_dict_v2 = dict(zip(np.unique(y_fit_v2), w_v2))
+                _free_memory(model)
+                model = build_model(
+                    optuna.trial.FixedTrial(best_params),
+                    (W_SIZE, len(SIGNAL_COLS)), num_classes
+                )
+                history = model.fit(
+                    X_fit_v2, to_categorical(y_fit_v2, num_classes),
+                    epochs=EPOCHS,
+                    validation_data=(X_val, to_categorical(y_val, num_classes)),
+                    batch_size=best_params.get("batch_size", 32),
+                    callbacks=[EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True),
+                               TerminateOnNaN()],
+                    class_weight=weight_dict_v2,
+                    verbose=1,
+                )
 
             y_pred  = np.argmax(model.predict(X_test, verbose=0), axis=1)
             f1_mac  = f1_score(y_test, y_pred, average="macro", zero_division=0)
@@ -596,7 +601,7 @@ def main():
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
 
-    train_global_model(df, best_params, num_classes)
+    train_global_model(df_labeled, best_params, num_classes)
 
 
 if __name__ == "__main__":

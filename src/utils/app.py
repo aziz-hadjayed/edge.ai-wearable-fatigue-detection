@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Add project root to sys.path so we can import from src
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import cast
@@ -9,11 +11,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, dcc, html
 
-# Add project root to sys.path so we can import from src
-import sys
-sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
-
-from src.config import RAW_DIR, PROCESSED_DIR
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from config import *
 
 try:
     from scipy.signal import find_peaks
@@ -22,7 +21,7 @@ except ImportError:
 
 
 V1_CANDIDATES = [
-    PROCESSED_DIR / "dataset_ref.csv",
+    PROCESSED_DIR / "dataset_smote.csv",
 ]
 SIGNALS = [
     "acc_x",
@@ -33,8 +32,8 @@ SIGNALS = [
     "ibi",
     "temp",
     "breathing_rpm",
-    "temperature_amb",
-    "humidite_amb",
+    "temp_amb",
+    "hum_amb",
     "age",
     "gender",
     "ear_ppg_left_green",
@@ -59,6 +58,9 @@ SIGNALS = [
     "spo2_right",
     "amplitude_right",
     "skewness_right",
+    "gx_ear_right",
+    "gy_ear_right",
+    "gz_ear_right",
 ]
 
 SIGNAL_UNITS = {
@@ -70,32 +72,35 @@ SIGNAL_UNITS = {
     "ibi": "ms",
     "temp": "deg C",
     "breathing_rpm": "rpm",
-    "temperature_amb":"deg C",
-    "humidite_amb":"%",
+    "temp_amb": "deg C",
+    "hum_amb": "%",
     "age": "ans",
     "gender": "code",
-    "ear_ppg_left_green":"signal",
-    "ear_ppg_left_ir":"signal",
-    "ear_ppg_left_red":"signal",
-    "ear_ppg_right_green":"signal",
-    "ear_ppg_right_ir":"signal",
-    "ear_ppg_right_red":"signal",
-    "bpm_left":"bpm",
-    "sdnn_left":"ms",
-    "rmssd_left":"ms",
-    "pnn50_left":"%",
-    "lfhf_left":"-",
-    "spo2_left":"%",
-    "amplitude_left":"Sortie du ADC (convertisseur)",
-    "skewness_left":"-",
-    "bpm_right":"bpm",
-    "sdnn_right":"ms",
-    "rmssd_right":"ms",
-    "pnn50_right":"%",
-    "lfhf_right":"-",
-    "spo2_right":"%",
-    "amplitude_right":"Sortie du ADC (convertisseur)",
-    "skewness_right":"-",
+    "ear_ppg_left_green": "signal",
+    "ear_ppg_left_ir": "signal",
+    "ear_ppg_left_red": "signal",
+    "ear_ppg_right_green": "signal",
+    "ear_ppg_right_ir": "signal",
+    "ear_ppg_right_red": "signal",
+    "bpm_left": "bpm",
+    "sdnn_left": "ms",
+    "rmssd_left": "ms",
+    "pnn50_left": "%",
+    "lfhf_left": "-",
+    "spo2_left": "%",
+    "amplitude_left": "Sortie du ADC (convertisseur)",
+    "skewness_left": "-",
+    "bpm_right": "bpm",
+    "sdnn_right": "ms",
+    "rmssd_right": "ms",
+    "pnn50_right": "%",
+    "lfhf_right": "-",
+    "spo2_right": "%",
+    "amplitude_right": "Sortie du ADC (convertisseur)",
+    "skewness_right": "-",
+    "gx_ear_right": "-",
+    "gy_ear_right": "-",
+    "gz_ear_right": "-",
 }
 
 FILE_COLS = {
@@ -104,11 +109,45 @@ FILE_COLS = {
     "wrist_hr.csv": {"hr": "wrist_hr"},
     "wrist_ibi.csv": {"duration": "ibi"},
     "wrist_skin_temperature.csv": {"temp": "temp"},
-    "ambient_grandeur.csv": {"temperature_amb": "temperature_amb", "humidite_amb": "humidite_amb"},
-    "ear_ppg_left.csv":{"green":"ear_ppg_left_green","ir":"ear_ppg_left_ir","red":"ear_ppg_left_red"},
-    "ear_ppg_right.csv":{"green":"ear_ppg_right_green","ir":"ear_ppg_right_ir","red":"ear_ppg_right_red"},
-    "features_ppg_ear_left.csv":{"amplitude":"amplitude_left","skewness":"skewness_left","bpm":"bpm_left","sdnn":"sdnn_left","rmssd":"rmssd_left","pnn50":"pnn50_left","lfhf":"lfhf_left","spo2":"spo2_left"},
-    "features_ppg_ear_right.csv":{"amplitude":"amplitude_right","skewness":"skewness_right","bpm":"bpm_right","sdnn":"sdnn_right","rmssd":"rmssd_right","pnn50":"pnn50_right","lfhf":"lfhf_right","spo2":"spo2_right"},
+    "ambient_grandeur.csv": {
+        "temperature_amb": "temp_amb",
+        "humidite_amb": "hum_amb",
+    },
+    "ear_ppg_left.csv": {
+        "green": "ear_ppg_left_green",
+        "ir": "ear_ppg_left_ir",
+        "red": "ear_ppg_left_red",
+    },
+    "ear_ppg_right.csv": {
+        "green": "ear_ppg_right_green",
+        "ir": "ear_ppg_right_ir",
+        "red": "ear_ppg_right_red",
+    },
+    "features_ppg_ear_left.csv": {
+        "amplitude": "amplitude_left",
+        "skewness": "skewness_left",
+        "bpm": "bpm_left",
+        "sdnn": "sdnn_left",
+        "rmssd": "rmssd_left",
+        "pnn50": "pnn50_left",
+        "lfhf": "lfhf_left",
+        "spo2": "spo2_left",
+    },
+    "features_ppg_ear_right.csv": {
+        "amplitude": "amplitude_right",
+        "skewness": "skewness_right",
+        "bpm": "bpm_right",
+        "sdnn": "sdnn_right",
+        "rmssd": "rmssd_right",
+        "pnn50": "pnn50_right",
+        "lfhf": "lfhf_right",
+        "spo2": "spo2_right",
+    },
+    "ear_gyro_right.csv": {
+        "gx": "gx_ear_right",
+        "gy": "gy_ear_right",
+        "gz": "gz_ear_right",
+    },
 }
 
 SIGNAL_FILES = {
@@ -120,8 +159,8 @@ SIGNAL_FILES = {
     "ibi": "wrist_ibi.csv",
     "temp": "wrist_skin_temperature.csv",
     "breathing_rpm": "chest_raw_breathing.csv",
-    "temperature_amb": "ambient_grandeur.csv",
-    "humidite_amb": "ambient_grandeur.csv",
+    "temp_amb": "ambient_grandeur.csv",
+    "hum_amb": "ambient_grandeur.csv",
     "ear_ppg_left_green": "ear_ppg_left.csv",
     "ear_ppg_left_ir": "ear_ppg_left.csv",
     "ear_ppg_left_red": "ear_ppg_left.csv",
@@ -144,15 +183,20 @@ SIGNAL_FILES = {
     "pnn50_right": "features_ppg_ear_right.csv",
     "lfhf_right": "features_ppg_ear_right.csv",
     "spo2_right": "features_ppg_ear_right.csv",
-
+    "gx_ear_right": "ear_gyro_right.csv",
+    "gy_ear_right": "ear_gyro_right.csv",
+    "gz_ear_right": "ear_gyro_right.csv",
 }
 
 LABELS = {
-    -1: {"name": "baseline", "color": "rgba(65, 105, 225, 0.14)"},
-    0: {"name": "activity", "color": "rgba(46, 160, 67, 0.13)"},
-    1: {"name": "fatigue", "color": "rgba(220, 53, 69, 0.14)"},
+    -1: {"name": "unlabeled", "color": "rgba(108, 117, 125, 0.12)"},
+    0: {"name": "baseline", "color": "rgba(65, 105, 225, 0.14)"},
+    1: {"name": "activity", "color": "rgba(46, 160, 67, 0.13)"},
+    2: {"name": "pre_fatigue", "color": "rgba(255, 193, 7, 0.16)"},
+    3: {"name": "fatigue", "color": "rgba(220, 53, 69, 0.14)"},
 }
-LABEL_MAP = {"baseline": -1, "activity": 0, "fatigue": 1}
+LABEL_MAP = {"baseline": 0, "activity": 1, "fatigue": 3}
+PHASES = ["baseline", "activity", "pre_fatigue", "fatigue"]
 GENDER_MAP = {"male": 1.0, "m": 1.0, "female": 0.0, "f": 0.0}
 
 
@@ -160,7 +204,12 @@ def signal_label(signal: str, sampling_rates: dict[str, float] | None = None) ->
     """Construit un libelle avec unite et frequence d'echantillonnage."""
     unit = SIGNAL_UNITS.get(signal, "")
     label = f"{signal} ({unit})" if unit else signal
-    if sampling_rates and signal in sampling_rates and pd.notna(sampling_rates[signal]) and sampling_rates[signal] > 0:
+    if (
+        sampling_rates
+        and signal in sampling_rates
+        and pd.notna(sampling_rates[signal])
+        and sampling_rates[signal] > 0
+    ):
         label = f"{label} - {sampling_rates[signal]:.2f} Hz"
     return label
 
@@ -199,7 +248,9 @@ def relative_time_to_seconds(values: pd.Series) -> pd.Series:
     return relative
 
 
-def estimate_dataframe_sampling_rates(df: pd.DataFrame, signals: list[str]) -> dict[str, float]:
+def estimate_dataframe_sampling_rates(
+    df: pd.DataFrame, signals: list[str]
+) -> dict[str, float]:
     """Estime les frequences apres consolidation quand les donnees sont deja fusionnees."""
     if "timestamp" not in df.columns or df.empty:
         return {}
@@ -219,7 +270,9 @@ def load_v1(participant: str, session: str) -> tuple[pd.DataFrame, list[str]]:
 
     df = pd.read_csv(path)
     assert isinstance(df, pd.DataFrame)
-    missing = [col for col in ["participant", "session", "timestamp"] if col not in df.columns]
+    missing = [
+        col for col in ["participant", "session", "timestamp"] if col not in df.columns
+    ]
     if missing:
         return pd.DataFrame(), [f"Colonnes V1 manquantes: {', '.join(missing)}"]
 
@@ -228,7 +281,9 @@ def load_v1(participant: str, session: str) -> tuple[pd.DataFrame, list[str]]:
     df = df.loc[(df["participant"] == participant) & (df["session"] == session)].copy()
     assert isinstance(df, pd.DataFrame)
     if df.empty:
-        return df, [f"Aucune ligne V1 pour participant {participant}, session {session}."]
+        return df, [
+            f"Aucune ligne V1 pour participant {participant}, session {session}."
+        ]
 
     df["timestamp"] = relative_time_to_seconds(df["timestamp"])
     for signal in SIGNALS + ["label"]:
@@ -241,7 +296,9 @@ def load_v1(participant: str, session: str) -> tuple[pd.DataFrame, list[str]]:
     return df, warnings
 
 
-def read_sensor_file(path: Path, rename_map: dict[str, str], start_ms: float) -> tuple[pd.DataFrame, str | None]:
+def read_sensor_file(
+    path: Path, rename_map: dict[str, str], start_ms: float
+) -> tuple[pd.DataFrame, str | None]:
     """Lit un fichier capteur, renomme ses colonnes et convertit le temps."""
     if not path.exists():
         return pd.DataFrame(), f"Fichier manquant: {path.name}"
@@ -323,25 +380,47 @@ def session_start_ms(session_dir: Path) -> float | None:
     if markers_path.exists():
         markers = pd.read_csv(markers_path)
         if "utcTime" in markers.columns:
-            starts.extend([float(x) for x in cast(pd.Series, pd.to_numeric(markers["utcTime"], errors="coerce")).dropna()])
+            starts.extend(
+                [
+                    float(x)
+                    for x in cast(
+                        pd.Series, pd.to_numeric(markers["utcTime"], errors="coerce")
+                    ).dropna()
+                ]
+            )
     for filename in [*FILE_COLS.keys(), "chest_raw_breathing.csv"]:
         path = session_dir / filename
         if path.exists():
             sample = pd.read_csv(path, usecols=["timestamp"])
-            starts.extend([float(x) for x in cast(pd.Series, pd.to_numeric(sample["timestamp"], errors="coerce")).dropna().head(1)])
+            starts.extend(
+                [
+                    float(x)
+                    for x in cast(
+                        pd.Series, pd.to_numeric(sample["timestamp"], errors="coerce")
+                    )
+                    .dropna()
+                    .head(1)
+                ]
+            )
     return min(starts) if starts else None
 
 
-def compute_breathing_rpm(session_dir: Path, base_time: pd.Series, start_ms: float) -> tuple[pd.DataFrame, str | None]:
+def compute_breathing_rpm(
+    session_dir: Path, base_time: pd.Series, start_ms: float
+) -> tuple[pd.DataFrame, str | None]:
     """Calcule breathing_rpm depuis chest_raw_breathing.csv quand c'est possible."""
     path = session_dir / "chest_raw_breathing.csv"
     if not path.exists():
-        return pd.DataFrame({"timestamp": base_time, "breathing_rpm": np.nan}), "Fichier manquant: chest_raw_breathing.csv"
+        return pd.DataFrame(
+            {"timestamp": base_time, "breathing_rpm": np.nan}
+        ), "Fichier manquant: chest_raw_breathing.csv"
 
     df = pd.read_csv(path)
     assert isinstance(df, pd.DataFrame)
     if "timestamp" not in df.columns:
-        return pd.DataFrame({"timestamp": base_time, "breathing_rpm": np.nan}), "Colonne timestamp absente: chest_raw_breathing.csv"
+        return pd.DataFrame(
+            {"timestamp": base_time, "breathing_rpm": np.nan}
+        ), "Colonne timestamp absente: chest_raw_breathing.csv"
 
     df["timestamp"] = to_relative_seconds(df["timestamp"], start_ms)
     if "breathing_rpm" in df.columns:
@@ -354,18 +433,26 @@ def compute_breathing_rpm(session_dir: Path, base_time: pd.Series, start_ms: flo
 
     value_cols = [col for col in df.columns if col != "timestamp"]
     if not value_cols or find_peaks is None:
-        return pd.DataFrame({"timestamp": base_time, "breathing_rpm": np.nan}), "Impossible de calculer breathing_rpm."
+        return pd.DataFrame(
+            {"timestamp": base_time, "breathing_rpm": np.nan}
+        ), "Impossible de calculer breathing_rpm."
 
-    waveform = cast(pd.Series, pd.to_numeric(df[value_cols[0]], errors="coerce")).interpolate(limit_direction="both")
+    waveform = cast(
+        pd.Series, pd.to_numeric(df[value_cols[0]], errors="coerce")
+    ).interpolate(limit_direction="both")
     if cast(pd.Series, waveform.dropna()).shape[0] < 3:
-        return pd.DataFrame({"timestamp": base_time, "breathing_rpm": np.nan}), "Signal breathing insuffisant."
+        return pd.DataFrame(
+            {"timestamp": base_time, "breathing_rpm": np.nan}
+        ), "Signal breathing insuffisant."
 
     dt = df["timestamp"].diff().median()
     sampling_rate = 1.0 / dt if pd.notna(dt) and dt > 0 else 25.0
     distance = max(1, int(sampling_rate * 1.5))
     peaks, _ = find_peaks(waveform.to_numpy(), distance=distance)
     if len(peaks) < 2:
-        return pd.DataFrame({"timestamp": base_time, "breathing_rpm": np.nan}), "Pics breathing insuffisants."
+        return pd.DataFrame(
+            {"timestamp": base_time, "breathing_rpm": np.nan}
+        ), "Pics breathing insuffisants."
 
     peak_times = df["timestamp"].iloc[peaks].to_numpy()
     intervals = np.diff(peak_times)
@@ -375,7 +462,9 @@ def compute_breathing_rpm(session_dir: Path, base_time: pd.Series, start_ms: flo
     return pd.DataFrame({"timestamp": base_time, "breathing_rpm": interpolated}), None
 
 
-def label_intervals(session_dir: Path, start_ms: float) -> list[tuple[float, float, int]]:
+def label_intervals(
+    session_dir: Path, start_ms: float
+) -> list[tuple[float, float, int]]:
     """Parse exp_markers.csv et retourne les intervalles labelises."""
     markers_path = session_dir / "exp_markers.csv"
     if not markers_path.exists():
@@ -388,14 +477,18 @@ def label_intervals(session_dir: Path, start_ms: float) -> list[tuple[float, flo
     markers["timestamp"] = to_relative_seconds(markers["utcTime"], start_ms)
     intervals: list[tuple[float, float, int]] = []
     for phase, label in LABEL_MAP.items():
-        starts = markers[markers["eventMarker"].eq(f"start_{phase}")]["timestamp"].tolist()
+        starts = markers[markers["eventMarker"].eq(f"start_{phase}")][
+            "timestamp"
+        ].tolist()
         ends = markers[markers["eventMarker"].eq(f"end_{phase}")]["timestamp"].tolist()
         for start, end in zip(starts, ends):
             intervals.append((float(start), float(end), label))
     return sorted(intervals, key=lambda item: item[0])
 
 
-def marker_time(markers: pd.DataFrame, marker_name: str, start_ms: float) -> float | None:
+def marker_time(
+    markers: pd.DataFrame, marker_name: str, start_ms: float
+) -> float | None:
     """Retourne le premier timestamp relatif associe a un marker."""
     if not {"utcTime", "eventMarker"}.issubset(markers.columns):
         return None
@@ -406,7 +499,9 @@ def marker_time(markers: pd.DataFrame, marker_name: str, start_ms: float) -> flo
     return float(times.iloc[0])
 
 
-def session_raw_end_seconds(session_dir: Path, markers: pd.DataFrame, start_ms: float) -> float | None:
+def session_raw_end_seconds(
+    session_dir: Path, markers: pd.DataFrame, start_ms: float
+) -> float | None:
     """Determine la fin de la session brute avec end_session ou les derniers timestamps capteurs."""
     end_from_marker = marker_time(markers, "end_session", start_ms)
     if end_from_marker is not None:
@@ -427,12 +522,27 @@ def session_raw_end_seconds(session_dir: Path, markers: pd.DataFrame, start_ms: 
     return max(ends) if ends else None
 
 
-def assign_labels(df: pd.DataFrame, intervals: list[tuple[float, float, int]]) -> pd.DataFrame:
-    """Ajoute la colonne label selon les intervalles experimentaux."""
+def assign_labels(
+    df: pd.DataFrame, intervals: list[tuple[float, float, int]]
+) -> pd.DataFrame:
+    """Ajoute les labels: -1 vide, 0 baseline, 1 activity, 2 pre_fatigue, 3 fatigue."""
     df["label"] = np.nan
     for start, end, label in intervals:
         mask = (df["timestamp"] >= start) & (df["timestamp"] <= end)
         df.loc[mask, "label"] = label
+
+    activity_end = next((end for _, end, label in intervals if label == LABEL_MAP["activity"]), None)
+    fatigue_start = next((start for start, _, label in intervals if label == LABEL_MAP["fatigue"]), None)
+    if activity_end is not None and fatigue_start is not None:
+        mask_pre_fatigue = (
+            (df["timestamp"] > activity_end)
+            & (df["timestamp"] < fatigue_start)
+            & (df["label"].isna())
+        )
+        df.loc[mask_pre_fatigue, "label"] = 2
+
+    mask_unlabeled = df["label"].isna()
+    df.loc[mask_unlabeled, "label"] = -1
     return df
 
 
@@ -468,7 +578,9 @@ def load_v2(participant: str, session: str) -> tuple[pd.DataFrame, list[str]]:
             tolerance=1,
         )
 
-    breathing, warning = compute_breathing_rpm(session_dir, merged["timestamp"], start_ms)
+    breathing, warning = compute_breathing_rpm(
+        session_dir, merged["timestamp"], start_ms
+    )
     if warning:
         warnings.append(warning)
     merged = pd.merge_asof(
@@ -496,24 +608,37 @@ def load_v2(participant: str, session: str) -> tuple[pd.DataFrame, list[str]]:
 
 @lru_cache(maxsize=1)
 def v2_global_phase_percentages() -> dict[str, dict[str, float]]:
-    """Calcule les pourcentages de duree baseline/activity/fatigue dans tout data/01_raw."""
-    totals = {phase: 0.0 for phase in LABEL_MAP}
+    """Calcule les pourcentages de duree des classes 0/1/2/3 dans tout data/01_raw."""
+    totals = {phase: 0.0 for phase in PHASES}
     if not RAW_DIR.exists():
-        return {phase: {"seconds": 0.0, "percent": 0.0} for phase in LABEL_MAP}
+        return {phase: {"seconds": 0.0, "percent": 0.0} for phase in PHASES}
 
     for markers_path in RAW_DIR.glob("[0-9][0-9]/[0-9][0-9]/exp_markers.csv"):
         session_dir = markers_path.parent
         start_ms = session_start_ms(session_dir)
         if start_ms is None:
             continue
-        for start, end, label in label_intervals(session_dir, start_ms):
-            if end > start:
-                phase = LABELS[label]["name"]
-                totals[phase] += end - start
+
+        markers = pd.read_csv(markers_path)
+        start_baseline = marker_time(markers, "start_baseline", start_ms)
+        end_baseline = marker_time(markers, "end_baseline", start_ms)
+        start_activity = marker_time(markers, "start_activity", start_ms)
+        end_activity = marker_time(markers, "end_activity", start_ms)
+        start_fatigue = marker_time(markers, "start_fatigue", start_ms)
+        end_fatigue = marker_time(markers, "end_fatigue", start_ms)
+
+        if start_baseline is not None and end_baseline is not None:
+            totals["baseline"] += max(0.0, end_baseline - start_baseline)
+        if start_activity is not None and end_activity is not None:
+            totals["activity"] += max(0.0, end_activity - start_activity)
+        if end_activity is not None and start_fatigue is not None:
+            totals["pre_fatigue"] += max(0.0, start_fatigue - end_activity)
+        if start_fatigue is not None and end_fatigue is not None:
+            totals["fatigue"] += max(0.0, end_fatigue - start_fatigue)
 
     total_seconds = sum(totals.values())
     if total_seconds <= 0:
-        return {phase: {"seconds": 0.0, "percent": 0.0} for phase in LABEL_MAP}
+        return {phase: {"seconds": 0.0, "percent": 0.0} for phase in PHASES}
     return {
         phase: {"seconds": seconds, "percent": seconds / total_seconds * 100.0}
         for phase, seconds in totals.items()
@@ -568,11 +693,11 @@ def v2_global_training_usage() -> dict[str, float]:
         session_used = (
             max(0.0, end_baseline - start_baseline)
             + max(0.0, end_activity - start_activity)
+            + max(0.0, start_fatigue - end_activity)
             + max(0.0, end_fatigue - start_fatigue)
         )
         session_unused = (
             max(0.0, start_activity - end_baseline)
-            + max(0.0, start_fatigue - end_activity)
             + max(0.0, session_end - end_fatigue)
         )
 
@@ -582,7 +707,9 @@ def v2_global_training_usage() -> dict[str, float]:
         sessions_count += 1
 
     used_percent = used_seconds / total_seconds * 100.0 if total_seconds > 0 else 0.0
-    unused_percent = unused_seconds / total_seconds * 100.0 if total_seconds > 0 else 0.0
+    unused_percent = (
+        unused_seconds / total_seconds * 100.0 if total_seconds > 0 else 0.0
+    )
     return {
         "total_seconds": total_seconds,
         "used_seconds": used_seconds,
@@ -596,18 +723,23 @@ def v2_global_training_usage() -> dict[str, float]:
 def phase_summary_component(version: str | list[str]) -> html.Div:
     """Prepare le panneau de repartition globale des phases V2."""
     if not version_has_v2(version):
-        return html.Div("La repartition globale est calculee pour la Version 2 brute.", className="muted-text")
+        return html.Div(
+            "La repartition globale est calculee pour la Version 2 brute.",
+            className="muted-text",
+        )
 
     percentages = v2_global_phase_percentages()
     cards = []
-    for phase in ["baseline", "activity", "fatigue"]:
+    for phase in PHASES:
         stats = percentages[phase]
         cards.append(
             html.Div(
                 [
                     html.Div(phase, className="phase-name"),
                     html.Div(f"{stats['percent']:.1f} %", className="phase-value"),
-                    html.Div(f"{stats['seconds'] / 60.0:.1f} min", className="phase-duration"),
+                    html.Div(
+                        f"{stats['seconds'] / 60.0:.1f} min", className="phase-duration"
+                    ),
                 ],
                 className=f"phase-card phase-{phase}",
             )
@@ -618,7 +750,10 @@ def phase_summary_component(version: str | list[str]) -> html.Div:
 def unused_summary_component(version: str | list[str]) -> html.Div:
     """Prepare le resume global des donnees non utilisees par le modele."""
     if not version_has_v2(version):
-        return html.Div("Selectionner la Version 2 pour afficher le pourcentage de data brute non utilisee.", className="muted-text")
+        return html.Div(
+            "Selectionner la Version 2 pour afficher le pourcentage de data brute non utilisee.",
+            className="muted-text",
+        )
 
     stats = v2_global_training_usage()
     return html.Div(
@@ -627,16 +762,21 @@ def unused_summary_component(version: str | list[str]) -> html.Div:
                 [
                     html.Div("Data utilisee pour entrainement", className="phase-name"),
                     html.Div(f"{stats['used_percent']:.1f} %", className="phase-value"),
-                    html.Div(f"{stats['used_seconds'] / 60.0:.1f} min", className="phase-duration"),
+                    html.Div(
+                        f"{stats['used_seconds'] / 60.0:.1f} min",
+                        className="phase-duration",
+                    ),
                 ],
                 className="phase-card phase-used",
             ),
             html.Div(
                 [
                     html.Div("Data non utilisee par le modele", className="phase-name"),
-                    html.Div(f"{stats['unused_percent']:.1f} %", className="phase-value"),
                     html.Div(
-                        "gaps: baseline->activity, activity->fatigue, fatigue->fin",
+                        f"{stats['unused_percent']:.1f} %", className="phase-value"
+                    ),
+                    html.Div(
+                        "vide: baseline->activity, fatigue->fin",
                         className="phase-duration",
                     ),
                 ],
@@ -645,8 +785,14 @@ def unused_summary_component(version: str | list[str]) -> html.Div:
             html.Div(
                 [
                     html.Div("Total brut V2 analyse", className="phase-name"),
-                    html.Div(f"{stats['total_seconds'] / 60.0:.1f} min", className="phase-value"),
-                    html.Div(f"{int(stats['sessions_count'])} sessions", className="phase-duration"),
+                    html.Div(
+                        f"{stats['total_seconds'] / 60.0:.1f} min",
+                        className="phase-value",
+                    ),
+                    html.Div(
+                        f"{int(stats['sessions_count'])} sessions",
+                        className="phase-duration",
+                    ),
                 ],
                 className="phase-card",
             ),
@@ -706,7 +852,9 @@ def add_label_background(fig: go.Figure, df: pd.DataFrame) -> None:
     add_label_shape(fig, start, timestamps[-1], current_label, legend_done)
 
 
-def add_label_shape(fig: go.Figure, x0: float, x1: float, label: float, legend_done: set[int]) -> None:
+def add_label_shape(
+    fig: go.Figure, x0: float, x1: float, label: float, legend_done: set[int]
+) -> None:
     """Ajoute un rectangle de fond et une entree de legende pour un label."""
     if pd.isna(label) or int(label) not in LABELS or x1 <= x0:
         return
@@ -720,7 +868,12 @@ def add_label_shape(fig: go.Figure, x0: float, x1: float, label: float, legend_d
                 x=[None],
                 y=[None],
                 mode="markers",
-                marker={"size": 12, "color": meta["color"].replace("0.14", "0.45").replace("0.13", "0.45")},
+                marker={
+                    "size": 12,
+                    "color": meta["color"]
+                    .replace("0.14", "0.45")
+                    .replace("0.13", "0.45"),
+                },
                 name=meta["name"],
                 legendgroup="labels",
                 showlegend=True,
@@ -729,11 +882,16 @@ def add_label_shape(fig: go.Figure, x0: float, x1: float, label: float, legend_d
         legend_done.add(label_int)
 
 
-def create_figure(df: pd.DataFrame, selected_signals: list[str], scale_mode: str) -> go.Figure:
+def create_figure(
+    df: pd.DataFrame, selected_signals: list[str], scale_mode: str
+) -> go.Figure:
     """Construit le graphe Plotly unique avec echelle brute ou normalisee."""
     if df.empty:
         fig = go.Figure()
-        fig.update_layout(template="plotly_white", annotations=[{"text": "Aucune donnee a afficher", "showarrow": False}])
+        fig.update_layout(
+            template="plotly_white",
+            annotations=[{"text": "Aucune donnee a afficher", "showarrow": False}],
+        )
         return fig
 
     selected_signals = [signal for signal in selected_signals if signal in df.columns]
@@ -758,13 +916,25 @@ def create_figure(df: pd.DataFrame, selected_signals: list[str], scale_mode: str
             )
         )
 
-    y_title = "Valeur normalisee (0-1)" if scale_mode == "normalized" else signal_label(selected_signals[0], sampling_rates) if selected_signals else ""
+    y_title = (
+        "Valeur normalisee (0-1)"
+        if scale_mode == "normalized"
+        else signal_label(selected_signals[0], sampling_rates)
+        if selected_signals
+        else ""
+    )
     layout = {
         "template": "plotly_white",
         "height": 720,
         "margin": {"l": 72, "r": 72, "t": 42, "b": 64},
         "hovermode": "x unified",
-        "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "left", "x": 0},
+        "legend": {
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "left",
+            "x": 0,
+        },
         "xaxis": {"title": "Temps relatif (s)", "rangeslider": {"visible": False}},
         "yaxis": {"title": y_title},
     }
@@ -772,7 +942,11 @@ def create_figure(df: pd.DataFrame, selected_signals: list[str], scale_mode: str
     if scale_mode == "raw":
         for index, signal in enumerate(selected_signals[1:], start=2):
             side = "right" if index % 2 == 0 else "left"
-            position = min(0.98, max(0.02, 1.0 - (index // 2) * 0.045)) if side == "right" else max(0.02, (index // 2) * 0.045)
+            position = (
+                min(0.98, max(0.02, 1.0 - (index // 2) * 0.045))
+                if side == "right"
+                else max(0.02, (index // 2) * 0.045)
+            )
             layout[f"yaxis{index}"] = {
                 "title": signal_label(signal, sampling_rates),
                 "overlaying": "y",
@@ -786,7 +960,9 @@ def create_figure(df: pd.DataFrame, selected_signals: list[str], scale_mode: str
     return fig
 
 
-def normalize_with_bounds(series: pd.Series, minimum: float, maximum: float) -> pd.Series:
+def normalize_with_bounds(
+    series: pd.Series, minimum: float, maximum: float
+) -> pd.Series:
     """Normalise une serie avec des bornes communes pour comparer V1 et V2."""
     values = cast(pd.Series, pd.to_numeric(series, errors="coerce"))
     if pd.isna(minimum) or pd.isna(maximum):
@@ -796,7 +972,9 @@ def normalize_with_bounds(series: pd.Series, minimum: float, maximum: float) -> 
     return cast(pd.Series, (values - minimum) / (maximum - minimum))
 
 
-def comparison_bounds(datasets: dict[str, pd.DataFrame], selected_signals: list[str]) -> dict[str, tuple[float, float]]:
+def comparison_bounds(
+    datasets: dict[str, pd.DataFrame], selected_signals: list[str]
+) -> dict[str, tuple[float, float]]:
     """Calcule les bornes min-max communes par signal pour la comparaison normalisee."""
     bounds: dict[str, tuple[float, float]] = {}
     for signal in selected_signals:
@@ -812,12 +990,17 @@ def comparison_bounds(datasets: dict[str, pd.DataFrame], selected_signals: list[
     return bounds
 
 
-def create_comparison_figure(datasets: dict[str, pd.DataFrame], selected_signals: list[str], scale_mode: str) -> go.Figure:
+def create_comparison_figure(
+    datasets: dict[str, pd.DataFrame], selected_signals: list[str], scale_mode: str
+) -> go.Figure:
     """Construit un graphe comparatif superposant V1 et V2 pour les memes signaux."""
     datasets = {version: df for version, df in datasets.items() if not df.empty}
     if not datasets:
         fig = go.Figure()
-        fig.update_layout(template="plotly_white", annotations=[{"text": "Aucune donnee a afficher", "showarrow": False}])
+        fig.update_layout(
+            template="plotly_white",
+            annotations=[{"text": "Aucune donnee a afficher", "showarrow": False}],
+        )
         return fig
 
     selected_signals = [
@@ -828,8 +1011,14 @@ def create_comparison_figure(datasets: dict[str, pd.DataFrame], selected_signals
     fig = go.Figure()
     background_df = next(iter(datasets.values()))
     add_label_background(fig, background_df)
-    bounds = comparison_bounds(datasets, selected_signals) if scale_mode == "normalized" else {}
-    signal_axis = {signal: index for index, signal in enumerate(selected_signals, start=1)}
+    bounds = (
+        comparison_bounds(datasets, selected_signals)
+        if scale_mode == "normalized"
+        else {}
+    )
+    signal_axis = {
+        signal: index for index, signal in enumerate(selected_signals, start=1)
+    }
     version_names = {"v1": "V1", "v2": "V2"}
     version_styles = {
         "v1": {"dash": "solid", "width": 1.8},
@@ -838,7 +1027,9 @@ def create_comparison_figure(datasets: dict[str, pd.DataFrame], selected_signals
 
     for signal in selected_signals:
         axis_index = signal_axis[signal]
-        yaxis = "y" if scale_mode == "normalized" or axis_index == 1 else f"y{axis_index}"
+        yaxis = (
+            "y" if scale_mode == "normalized" or axis_index == 1 else f"y{axis_index}"
+        )
         unit = "0-1" if scale_mode == "normalized" else SIGNAL_UNITS.get(signal, "")
         hover_unit = f" {unit}" if unit else ""
         minimum, maximum = bounds.get(signal, (np.nan, np.nan))
@@ -865,13 +1056,23 @@ def create_comparison_figure(datasets: dict[str, pd.DataFrame], selected_signals
 
     first_signal = selected_signals[0] if selected_signals else ""
     first_rates = next(iter(datasets.values())).attrs.get("sampling_rates", {})
-    y_title = "Valeur normalisee commune (0-1)" if scale_mode == "normalized" else signal_label(first_signal, first_rates)
+    y_title = (
+        "Valeur normalisee commune (0-1)"
+        if scale_mode == "normalized"
+        else signal_label(first_signal, first_rates)
+    )
     layout = {
         "template": "plotly_white",
         "height": 720,
         "margin": {"l": 72, "r": 72, "t": 42, "b": 64},
         "hovermode": "x unified",
-        "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "left", "x": 0},
+        "legend": {
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "left",
+            "x": 0,
+        },
         "xaxis": {"title": "Temps relatif (s)", "rangeslider": {"visible": False}},
         "yaxis": {"title": y_title},
     }
@@ -882,7 +1083,11 @@ def create_comparison_figure(datasets: dict[str, pd.DataFrame], selected_signals
         for signal in selected_signals[1:]:
             axis_index = signal_axis[signal]
             side = "right" if axis_index % 2 == 0 else "left"
-            position = min(0.98, max(0.02, 1.0 - (axis_index // 2) * 0.045)) if side == "right" else max(0.02, (axis_index // 2) * 0.045)
+            position = (
+                min(0.98, max(0.02, 1.0 - (axis_index // 2) * 0.045))
+                if side == "right"
+                else max(0.02, (axis_index // 2) * 0.045)
+            )
             layout[f"yaxis{axis_index}"] = {
                 "title": signal_label(signal, first_rates),
                 "overlaying": "y",
@@ -912,8 +1117,14 @@ app.layout = html.Div(
                                 dcc.Checklist(
                                     id="data-version",
                                     options=[
-                                        {"label": "Version 1 (CSV unique)", "value": "v1"},
-                                        {"label": "Version 2 (dossiers)", "value": "v2"},
+                                        {
+                                            "label": "Version 1 (CSV unique)",
+                                            "value": "v1",
+                                        },
+                                        {
+                                            "label": "Version 2 (dossiers)",
+                                            "value": "v2",
+                                        },
                                     ],
                                     value=["v1"],
                                     inline=True,
@@ -927,7 +1138,10 @@ app.layout = html.Div(
                                 html.Label("Participant"),
                                 dcc.Dropdown(
                                     id="participant",
-                                    options=[{"label": f"{idx:02d}", "value": f"{idx:02d}"} for idx in range(1, 13)],
+                                    options=[
+                                        {"label": f"{idx:02d}", "value": f"{idx:02d}"}
+                                        for idx in range(1, 13)
+                                    ],
                                     value="01",
                                     clearable=False,
                                 ),
@@ -939,7 +1153,10 @@ app.layout = html.Div(
                                 html.Label("Session"),
                                 dcc.Dropdown(
                                     id="session",
-                                    options=[{"label": f"{idx:02d}", "value": f"{idx:02d}"} for idx in range(1, 4)],
+                                    options=[
+                                        {"label": f"{idx:02d}", "value": f"{idx:02d}"}
+                                        for idx in range(1, 4)
+                                    ],
                                     value="01",
                                     clearable=False,
                                 ),
@@ -951,7 +1168,12 @@ app.layout = html.Div(
                                 html.Label("Echelle Y"),
                                 dcc.Checklist(
                                     id="scale-switch",
-                                    options=[{"label": "Echelle normalisee", "value": "normalized"}],
+                                    options=[
+                                        {
+                                            "label": "Echelle normalisee",
+                                            "value": "normalized",
+                                        }
+                                    ],
                                     value=[],
                                     className="switch-like",
                                 ),
@@ -966,8 +1188,18 @@ app.layout = html.Div(
                         html.Label("Signaux"),
                         dcc.Checklist(
                             id="signals",
-                            options=[{"label": signal, "value": signal} for signal in SIGNALS],
-                            value=["acc_x", "acc_y", "acc_z", "eda", "wrist_hr", "temp", "breathing_rpm"],
+                            options=[
+                                {"label": signal, "value": signal} for signal in SIGNALS
+                            ],
+                            value=[
+                                "acc_x",
+                                "acc_y",
+                                "acc_z",
+                                "eda",
+                                "wrist_hr",
+                                "temp",
+                                "breathing_rpm",
+                            ],
                             inline=True,
                             className="signals-list",
                         ),
@@ -979,16 +1211,27 @@ app.layout = html.Div(
         ),
         html.Div(
             [
-                html.Div("Repartition globale des phases - dataset brut V2", className="panel-title"),
+                html.Div(
+                    "Repartition globale des phases - dataset brut V2",
+                    className="panel-title",
+                ),
                 html.Div(id="phase-summary"),
             ],
             className="summary-panel",
         ),
         html.Div(id="warnings", className="warning-box"),
-        dcc.Loading(dcc.Graph(id="main-graph", config={"displaylogo": False, "scrollZoom": True}), type="default"),
+        dcc.Loading(
+            dcc.Graph(
+                id="main-graph", config={"displaylogo": False, "scrollZoom": True}
+            ),
+            type="default",
+        ),
         html.Div(
             [
-                html.Div("Pourcentage global de data brute non utilisee par le modele", className="panel-title"),
+                html.Div(
+                    "Pourcentage global de data brute non utilisee par le modele",
+                    className="panel-title",
+                ),
                 html.Div(id="unused-summary"),
             ],
             className="summary-panel bottom-panel",
@@ -1024,6 +1267,7 @@ app.index_string = """
             .phase-card { border-radius: 8px; padding: 12px; border: 1px solid #d9e2ef; }
             .phase-baseline { background: rgba(65, 105, 225, 0.10); }
             .phase-activity { background: rgba(46, 160, 67, 0.10); }
+            .phase-pre_fatigue { background: rgba(255, 193, 7, 0.12); }
             .phase-fatigue { background: rgba(220, 53, 69, 0.10); }
             .phase-used { background: rgba(46, 160, 67, 0.10); }
             .phase-unused { background: rgba(245, 158, 11, 0.14); }
@@ -1066,7 +1310,13 @@ app.index_string = """
     Input("signals", "value"),
     Input("scale-switch", "value"),
 )
-def update_graph(version: list[str], participant: str, session: str, signals: list[str], scale_values: list[str]):
+def update_graph(
+    version: list[str],
+    participant: str,
+    session: str,
+    signals: list[str],
+    scale_values: list[str],
+):
     participant = participant.zfill(2)
     session = session.zfill(2)
     selected_versions = version or ["v1"]
@@ -1081,13 +1331,21 @@ def update_graph(version: list[str], participant: str, session: str, signals: li
         datasets["v2"] = df_v2
         warnings.extend([f"V2: {warning}" for warning in warnings_v2])
 
-    scale_mode = "normalized" if scale_values and "normalized" in scale_values else "raw"
+    scale_mode = (
+        "normalized" if scale_values and "normalized" in scale_values else "raw"
+    )
     fig = create_comparison_figure(datasets, signals or [], scale_mode)
-    warning_text = html.Ul([html.Li(warning) for warning in warnings]) if warnings else ""
-    return fig, warning_text, phase_summary_component(selected_versions), unused_summary_component(selected_versions)
+    warning_text = (
+        html.Ul([html.Li(warning) for warning in warnings]) if warnings else ""
+    )
+    return (
+        fig,
+        warning_text,
+        phase_summary_component(selected_versions),
+        unused_summary_component(selected_versions),
+    )
 
 
 if __name__ == "__main__":
     # use_reloader=False évite que le débogueur VS Code (debugpy) n'intercepte SystemExit: 3 lors du rechargement
     app.run(debug=True, use_reloader=False)
-
