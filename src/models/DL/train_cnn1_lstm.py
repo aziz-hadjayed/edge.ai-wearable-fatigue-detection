@@ -35,7 +35,7 @@ if gpus:
     except RuntimeError as e:
         print(e)
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import *
 
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score
@@ -50,7 +50,7 @@ from tensorflow.keras.optimizers import Adam, RMSprop
 from tensorflow.keras.regularizers import l2
 from keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
-from models.semi_supervised import add_pseudo_labels
+from models.semi_supervised import add_pseudo_labels, extract_all_windows , extract_windows
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -67,21 +67,7 @@ N_OPTUNA_EPOCHS   = 10      # nombre d'époques par trial Optuna
 # Budget Flash STM32 pour TFLite INT8
 EDGE_FLASH_BUDGET_KB = STM32_FLASH_KB
 
-OPTUNA_SPACE = {
-    "cnn_filters":    [32, 64, 128],
-    "cnn_kernel":     [3, 5],
-    "n_conv_blocks":  [1, 2, 3],
-    "pool_size":      [2, 3],
-    "lstm_units":     [32, 64, 128],
-    "bidirectional":  [True, False],
-    "activation":     ["relu", "leaky_relu"],
-    "l2_reg":         (1e-5, 1e-2),
-    "optimizer":      ["adam", "rmsprop"],
-    "dense_units":    [32, 64, 128],
-    "dropout_rate":   (0.2, 0.5),
-    "learning_rate":  (1e-4, 1e-3),
-    "batch_size":     [32, 64],
-}
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 3. MÉMOIRE
@@ -230,26 +216,6 @@ def plot_fold(history, fold_idx, test_part, test_sess, save_dir,
 # ══════════════════════════════════════════════════════════════════════
 # 6. DONNÉES — fenêtrage
 # ══════════════════════════════════════════════════════════════════════
-def extract_windows(group_df, window_size, step_size):
-    X = group_df[SIGNAL_COLS].values
-    y = group_df[COL_LABEL].values
-    wx, wy = [], []
-    for start in range(0, len(X) - window_size + 1, step_size):
-        end = start + window_size
-        vals, counts = np.unique(y[start:end], return_counts=True)
-        wx.append(X[start:end])
-        wy.append(vals[np.argmax(counts)])
-    return wx, wy
-
-def extract_all_windows(df, window_size, step_size):
-    X_all, y_all = [], []
-    if COL_TIMESTAMP in df.columns:
-        df = df.sort_values([COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP])
-    for _, group in df.groupby([COL_PARTICIPANT, COL_SESSION]):
-        wx, wy = extract_windows(group, window_size, step_size)
-        X_all.extend(wx); y_all.extend(wy)
-    return np.array(X_all), np.array(y_all)
-
 
 def precompute_session_windows(df, window_size, step_size):
     """Pré-extrait les fenêtres brutes (float16) par session — une seule fois pour Optuna."""
@@ -274,18 +240,18 @@ def build_model(trial, input_shape, num_classes):
       LSTM       : 1 couche LSTM (optionnel Bidirectional) — modélisation temporelle
       Tête       : Dense → Dropout → Softmax(3)
     """
-    cnn_filters    = trial.suggest_categorical("cnn_filters",   OPTUNA_SPACE["cnn_filters"])
-    cnn_kernel     = trial.suggest_categorical("cnn_kernel",    OPTUNA_SPACE["cnn_kernel"])
-    n_conv_blocks  = trial.suggest_categorical("n_conv_blocks", OPTUNA_SPACE["n_conv_blocks"])
-    pool_size      = trial.suggest_categorical("pool_size",     OPTUNA_SPACE["pool_size"])
-    lstm_units     = trial.suggest_categorical("lstm_units",    OPTUNA_SPACE["lstm_units"])
-    bidirectional  = trial.suggest_categorical("bidirectional", OPTUNA_SPACE["bidirectional"])
-    activation     = trial.suggest_categorical("activation",    OPTUNA_SPACE["activation"])
-    l2_reg         = trial.suggest_float("l2_reg",       *OPTUNA_SPACE["l2_reg"], log=True)
-    optimizer_str  = trial.suggest_categorical("optimizer",     OPTUNA_SPACE["optimizer"])
-    dense_units    = trial.suggest_categorical("dense_units",   OPTUNA_SPACE["dense_units"])
-    dropout_rate   = trial.suggest_float("dropout_rate",  *OPTUNA_SPACE["dropout_rate"])
-    learning_rate  = trial.suggest_float("learning_rate", *OPTUNA_SPACE["learning_rate"], log=True)
+    cnn_filters    = trial.suggest_categorical("cnn_filters",   CNN_LSTM_OPTUNA_SPACE["cnn_filters"])
+    cnn_kernel     = trial.suggest_categorical("cnn_kernel",    CNN_LSTM_OPTUNA_SPACE["cnn_kernel"])
+    n_conv_blocks  = trial.suggest_categorical("n_conv_blocks", CNN_LSTM_OPTUNA_SPACE["n_conv_blocks"])
+    pool_size      = trial.suggest_categorical("pool_size",     CNN_LSTM_OPTUNA_SPACE["pool_size"])
+    lstm_units     = trial.suggest_categorical("lstm_units",    CNN_LSTM_OPTUNA_SPACE["lstm_units"])
+    bidirectional  = trial.suggest_categorical("bidirectional", CNN_LSTM_OPTUNA_SPACE["bidirectional"])
+    activation     = trial.suggest_categorical("activation",    CNN_LSTM_OPTUNA_SPACE["activation"])
+    l2_reg         = trial.suggest_float("l2_reg",       *CNN_LSTM_OPTUNA_SPACE["l2_reg"], log=True)
+    optimizer_str  = trial.suggest_categorical("optimizer",     CNN_LSTM_OPTUNA_SPACE["optimizer"])
+    dense_units    = trial.suggest_categorical("dense_units",   CNN_LSTM_OPTUNA_SPACE["dense_units"])
+    dropout_rate   = trial.suggest_float("dropout_rate",  *CNN_LSTM_OPTUNA_SPACE["dropout_rate"])
+    learning_rate  = trial.suggest_float("learning_rate", *CNN_LSTM_OPTUNA_SPACE["learning_rate"], log=True)
 
     act_name = "relu" if activation == "relu" else activation
 
@@ -328,7 +294,7 @@ def optuna_objective(trial, session_windows, num_classes, n_optuna_epochs=N_OPTU
     config      = WINDOW_CONFIGS["default"]
     window_size = config["window_size"]
     input_shape = (window_size, len(SIGNAL_COLS))
-    batch_size  = trial.suggest_categorical("batch_size", OPTUNA_SPACE["batch_size"])
+    batch_size  = trial.suggest_categorical("batch_size", CNN_LSTM_OPTUNA_SPACE["batch_size"])
 
     import random
     all_sessions  = list(session_windows.keys())
@@ -427,17 +393,26 @@ def optimize_hyperparams(df, num_classes, n_trials=N_OPTUNA_TRIALS, n_optuna_epo
 # ══════════════════════════════════════════════════════════════════════
 # 9. MODÈLE GLOBAL
 # ══════════════════════════════════════════════════════════════════════
-def train_global_model(df_labeled, best_params, num_classes):
+def train_global_model(df_labeled, df_unlabeled, best_params, num_classes):
     print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
     config = WINDOW_CONFIGS["default"]
     W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
 
-    df_all = df.copy()
+    df_all = df_labeled.copy()
     scaler = RobustScaler()
     df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
+    df_unl = df_unlabeled.copy()
+    if len(df_unl) > 0:
+        df_unl[SIGNAL_COLS] = scaler.transform(df_unl[SIGNAL_COLS])
+
     X_all, y_all = extract_all_windows(df_all, W_SIZE, S_SIZE)
-    del df_all; gc.collect()
-    print(f"  Fenêtres totales : {len(X_all)}")
+    X_unlabeled, _ = (
+        extract_all_windows(df_unl, W_SIZE, S_SIZE)
+        if len(df_unl) > 0 else (np.array([]), np.array([]))
+    )
+    del df_all, df_unl
+    gc.collect()
+    print(f"  Fenêtres labellisées : {len(X_all)} | unlabeled : {len(X_unlabeled)}")
 
     model = None
     try:
@@ -449,6 +424,8 @@ def train_global_model(df_labeled, best_params, num_classes):
             optuna.trial.FixedTrial(best_params),
             (W_SIZE, len(SIGNAL_COLS)), num_classes
         )
+        w = compute_class_weight("balanced", classes=np.unique(y_tr), y=y_tr)
+        weight_dict = dict(zip(np.unique(y_tr), w))
         model.fit(
             X_tr, to_categorical(y_tr, num_classes),
             validation_data=(X_vl, to_categorical(y_vl, num_classes)),
@@ -456,14 +433,39 @@ def train_global_model(df_labeled, best_params, num_classes):
             batch_size=best_params.get("batch_size", 32),
             callbacks=[EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
                        TerminateOnNaN()],
+            class_weight=weight_dict,
             verbose=1,
         )
+
+        X_tr_v2, y_tr_v2, pseudo_y, _ = add_pseudo_labels(model, X_tr, y_tr, X_unlabeled)
+        if len(pseudo_y) > 0:
+            w_v2 = compute_class_weight("balanced", classes=np.unique(y_tr_v2), y=y_tr_v2)
+            weight_dict_v2 = dict(zip(np.unique(y_tr_v2), w_v2))
+            _free_memory(model)
+            model = build_model(
+                optuna.trial.FixedTrial(best_params),
+                (W_SIZE, len(SIGNAL_COLS)), num_classes
+            )
+            model.fit(
+                X_tr_v2, to_categorical(y_tr_v2, num_classes),
+                validation_data=(X_vl, to_categorical(y_vl, num_classes)),
+                epochs=EPOCHS,
+                batch_size=best_params.get("batch_size", 32),
+                callbacks=[EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
+                           TerminateOnNaN()],
+                class_weight=weight_dict_v2,
+                verbose=1,
+            )
+            X_repr = np.concatenate([X_tr_v2, X_vl], axis=0)
+        else:
+            X_repr = X_all
+
         models_dir = MODELS_DIR / "CNN-LSTM"
         models_dir.mkdir(parents=True, exist_ok=True)
-        _save_tflite_int8(model, X_all, models_dir, f"{MODEL_NAME}_global")
-        print(f"  ✅ Modèle global sauvegardé.")
+        _save_tflite_int8(model, X_repr, models_dir, f"{MODEL_NAME}_global")
+        print(f"  Modèle global exporté (.tflite + .h).")
     except Exception as exc:
-        print(f"  ❌ Modèle global échoué ({type(exc).__name__}: {exc})")
+        print(f"  Modèle global échoué ({type(exc).__name__}: {exc})")
     finally:
         _free_memory(model)
         del X_all, y_all
@@ -475,7 +477,7 @@ def train_global_model(df_labeled, best_params, num_classes):
 def main():
     print("\n" + "=" * 60 + f"\nTRAIN LOSO — {MODEL_NAME}\n" + "=" * 60)
     if not DATA_MODEL_READY.exists():
-        return print(f"❌ Dataset non trouvé : {DATA_MODEL_READY}")
+        return print(f"Dataset non trouvé : {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
     df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
@@ -578,7 +580,7 @@ def main():
             y_pred  = np.argmax(model.predict(X_test, verbose=0), axis=1)
             f1_mac  = f1_score(y_test, y_pred, average="macro", zero_division=0)
             bal_acc = balanced_accuracy_score(y_test, y_pred)
-            print(f"  ✅ F1-Macro: {f1_mac:.4f} | Bal.Acc: {bal_acc:.4f}")
+            print(f"  F1-Macro: {f1_mac:.4f} | Bal.Acc: {bal_acc:.4f}")
 
             plots_dir = BASE_DIR / "training_curves" / "CNN-LSTM"
             plots_dir.mkdir(parents=True, exist_ok=True)
@@ -591,7 +593,7 @@ def main():
             })
 
         except Exception as exc:
-            print(f"  ❌ Fold {test_idx+1} échoué ({type(exc).__name__}: {exc})")
+            print(f"  Fold {test_idx+1} échoué ({type(exc).__name__}: {exc})")
         finally:
             _free_memory(model)
             del X_fit, X_val, X_test, y_fit, y_val, y_test
@@ -625,7 +627,7 @@ def main():
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
 
-    train_global_model(df_labeled, best_params, num_classes)
+    train_global_model(df_labeled, df_unlabeled, best_params, num_classes)
 
 
 if __name__ == "__main__":

@@ -1,15 +1,15 @@
 {
-    "best_value": 0.7201557571733009,
+    "best_value": 0.5224711999227876,
     "best_params": {
-        "batch_size": 32,
+        "batch_size": 64,
         "n_tcn_blocks": 3,
-        "tcn_filters": 64,
-        "tcn_kernel": 5,
+        "tcn_filters": 128,
+        "tcn_kernel": 3,
         "activation": "leaky_relu",
-        "l2_reg": 0.0006379184058649745,
-        "optimizer": "adam",
-        "dense_units": 128,
-        "dropout_rate": 0.24365524869541297,
-        "learning_rate": 0.0004148672008962955
+        "l2_reg": 0.0029753822912700384,
+        "optimizer": "rmsprop",
+        "dense_units": 32,
+        "dropout_rate": 0.4486277698278758,
+        "learning_rate": 0.0007720563684349782
     }
 }

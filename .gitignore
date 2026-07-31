@@ -10,6 +10,11 @@ data/
 
 # Modèles sauvegardés
 models_saved/
+yolo26n.pt
+yolov8n-cls.pt
+yolov8n.pt
+runs/
+
 
 
 # Fichiers temporaires
@@ -37,4 +42,11 @@ ADAPTIVE_LOSO_GUIDE.md
 cuda_12.6.0_560.28.03_linux.run
 
 training_curves/
-reports/
+reports/*.pt
+*.onnx
+*.pkl
+*.bin
+*.tflite
+*.pb
+runs/
+ble.sh/

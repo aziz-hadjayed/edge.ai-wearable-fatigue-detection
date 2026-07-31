@@ -51,7 +51,19 @@ EPS = 1e-6
 # ═══════════════════════════════════════════════════════════════════════════════
 # FONCTIONS AMBIANT (NOUVEAU)
 # ═══════════════════════════════════════════════════════════════════════════════
+TARGET_AMBIENT_FREQ = 4.0  # Hz
 
+def _subsample_to_freq(timestamps_ms, target_freq):
+    """Sous-echantillonne un array de timestamps (ms) a une frequence cible."""
+    period_ms = 1000.0 / target_freq
+    t0 = timestamps_ms[0]
+    mask = np.zeros(len(timestamps_ms), dtype=bool)
+    last_kept_ts = t0 - period_ms  # force la 1ere valeur a etre gardee
+    for i, ts in enumerate(timestamps_ms):
+        if ts - last_kept_ts >= period_ms:
+            mask[i] = True
+            last_kept_ts = ts
+    return timestamps_ms[mask]
 
 def fetch_meteo_two_hours(session_datetime):
     """Récupère température et humidité aux heures H et H+1."""
@@ -464,11 +476,11 @@ def main():
                 participant_id, session_num, first_timestamp=timestamps[0]
             )
             print(f"  → Session datetime: {session_dt.strftime('%Y-%m-%d %H:%M')}")
-
+            ambient_timestamps = _subsample_to_freq(timestamps, TARGET_AMBIENT_FREQ)
             df_ambient = generate_ambient_synced(
                 session_id=session_full_id,
                 session_datetime=session_dt,
-                timestamp_ref=timestamps,  # ← SYNCHRONISÉ AVEC PPG
+                timestamp_ref=ambient_timestamps,
             )
 
             if df_ambient is not None:
@@ -526,7 +538,6 @@ def main():
     print(f"Fenêtres PPG extraites: {total_windows}")
     print(f"Fichiers ambiant générés: {total_ambient}")
     print("=" * 70)
-
 
 if __name__ == "__main__":
     main()

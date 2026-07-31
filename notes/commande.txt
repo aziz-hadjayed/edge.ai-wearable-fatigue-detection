@@ -1,0 +1,44 @@
+
+git checkout main
+git merge --ff-only dev
+git push origin main
+
+
+
+
+
+autocomplétion en temps réel : Bash Line Editor .sh (ble.sh)
+
+# 1. Installer les dépendances
+sudo apt install gawk
+
+# 2. Télécharger ble.sh
+cd ~
+git clone --recursive --depth 1 --shallow-submodules https://github.com/akinomyoga/ble.sh.git
+
+# 3. Installer
+make -C ~/ble.sh install PREFIX=~/.local
+
+# 4. Activer au démarrage de Bash
+echo 'source ~/.local/share/blesh/ble.sh' | cat - ~/.bashrc > /tmp/bashrc_new && mv /tmp/bashrc_new ~/.bashrc
+
+# 5. Recharger le terminal
+source ~/.bashrc
+
+
+
+
+
+mise a jour repo github :
+
+git switch dev
+git .add
+git commit -m "update"
+git push origin main
+
+
+
+
+
+
+

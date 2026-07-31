@@ -1,8 +1,10 @@
 import gc
+import inspect
 import importlib.util
 import json
 import random
 import sys
+import traceback
 import warnings
 from pathlib import Path
 
@@ -11,18 +13,26 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+import onnx
+import onnx.helper
+import onnx.numpy_helper
+import onnxruntime as ort
 import optuna
 import pandas as pd
 from reservoirpy.nodes import RLS
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import *
+from models.semi_supervised import add_pseudo_labels
+from utils.apply_smote import resample_dataframe
 
 from sklearn.metrics import (
     balanced_accuracy_score,
     classification_report,
     confusion_matrix,
     f1_score,
+    precision_score,
+    recall_score,
 )
 from sklearn.preprocessing import RobustScaler, StandardScaler
 
@@ -38,8 +48,8 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 
 MODEL_NAME = "ESN_RLS"
-LABEL_MAPPING = {-1: 0, 0: 1, 1: 2}
-TARGET_NAMES = ["baseline (-1)", "activity (0)", "fatigue (1)"]
+LABEL_MAPPING = {0: 0, 1: 1, 2: 2, 3: 3}
+TARGET_NAMES = ["baseline", "activity", "pre_fatigue", "fatigue"]
 RLS_FEATURE_CLIP = 8.0
 
 
@@ -141,8 +151,23 @@ def predict_readout(model, x):
         scores = scores.reshape(1, -1)
     if not np.all(np.isfinite(scores)):
         raise FloatingPointError("RLS predictions contiennent des valeurs non finies")
-    # Argmax sur les sorties One-Hot apprises : 0=baseline, 1=activity, 2=fatigue.
+    # Argmax sur les sorties One-Hot apprises : 0=baseline, 1=activity, 2=pre_fatigue, 3=fatigue.
     return np.argmax(scores, axis=1).astype(np.int32)
+
+
+class _ReadoutProbaWrapper:
+    """
+    Adapte le RLS readout pour exposer predict_proba, compatible avec add_pseudo_labels().
+    """
+    def __init__(self, readout_model):
+        self.readout_model = readout_model
+
+    def predict_proba(self, x):
+        scores = np.asarray(self.readout_model.run(_clean_features(x)), dtype=np.float32)
+        if scores.ndim == 1:
+            scores = scores.reshape(1, -1)
+        exp_scores = np.exp(scores - scores.max(axis=1, keepdims=True))
+        return exp_scores / exp_scores.sum(axis=1, keepdims=True)
 
 
 # ============================================================================
@@ -182,6 +207,9 @@ def optuna_objective(trial, df, sessions, window_size, step_size):
             # Split session-wise : la session de validation ne fuit pas dans l'entrainement.
             df_train = df[~((df[COL_PARTICIPANT] == val_part) & (df[COL_SESSION] == val_sess))].copy()
             df_val = df[(df[COL_PARTICIPANT] == val_part) & (df[COL_SESSION] == val_sess)].copy()
+
+            # SMOTE seulement sur df_train, avant le scaling et l'extraction de features ESN.
+            df_train = resample_dataframe(df_train, SIGNAL_COLS)
 
             # Normalisation des signaux bruts avant passage dans le reservoir ESN.
             scaler = RobustScaler()
@@ -316,53 +344,343 @@ def plot_fold(fold_idx, test_part, test_sess, save_dir, f1_mac, bal_acc, y_true,
 # ============================================================================
 # 5. MODELE GLOBAL
 # ============================================================================
-def train_global_model(df, best_params):
-    """
-    Entraine un modele ESN_RLS final sur tout le dataset et le sauvegarde avec ses scalers.
-    Ce modele global sert ensuite a l'inference ou a l'embarquement edge.
-    """
-    print("\n" + "=" * 60 + f"\nMODELE GLOBAL - {MODEL_NAME}\n" + "=" * 60)
-    config = WINDOW_CONFIGS["default"]
-    window_size = config["window_size"]
-    step_size = config["step_size"]
+def _build_onnx_esn_rls_graph(
+    W_in,
+    W,
+    leak_rate,
+    mean,
+    scale,
+    clip_value,
+    Wout,
+    bias,
+    window_size,
+    n_features,
+    n_reservoir,
+    num_classes,
+    washout,
+    state_summary,
+    model_name,
+):
+    W_in_T = np.asarray(W_in, dtype=np.float32).T
+    W_T = np.asarray(W, dtype=np.float32).T
+    mean = np.asarray(mean, dtype=np.float32).reshape(1, -1)
+    scale = np.asarray(scale, dtype=np.float32).reshape(1, -1)
+    Wout = np.asarray(Wout, dtype=np.float32)
+    bias = np.asarray(bias, dtype=np.float32).reshape(-1)
 
-    # Normalisation des signaux bruts sur toutes les donnees disponibles.
-    df_all = df.copy()
+    feature_dim = int(mean.shape[1])
+    nodes = []
+    initializers = [
+        onnx.numpy_helper.from_array(W_in_T, "W_in_T"),
+        onnx.numpy_helper.from_array(W_T, "W_T"),
+        onnx.numpy_helper.from_array(mean, "feature_mean"),
+        onnx.numpy_helper.from_array(scale, "feature_scale"),
+        onnx.numpy_helper.from_array(np.asarray(Wout, dtype=np.float32), "Wout"),
+        onnx.numpy_helper.from_array(bias.astype(np.float32), "bias"),
+        onnx.numpy_helper.from_array(np.asarray([1.0 - float(leak_rate)], dtype=np.float32), "one_minus_leak"),
+        onnx.numpy_helper.from_array(np.asarray([float(leak_rate)], dtype=np.float32), "leak"),
+        onnx.numpy_helper.from_array(np.asarray([-float(clip_value)], dtype=np.float32), "clip_min"),
+        onnx.numpy_helper.from_array(np.asarray([float(clip_value)], dtype=np.float32), "clip_max"),
+        onnx.numpy_helper.from_array(np.zeros((1, n_reservoir), dtype=np.float32), "state_init"),
+        onnx.numpy_helper.from_array(np.array([0], dtype=np.int64), "axis_0"),
+    ]
+
+    prev_state = "state_init"
+    kept_states = []
+    for t in range(int(window_size)):
+        initializers.append(onnx.numpy_helper.from_array(np.asarray(t, dtype=np.int64), f"time_idx_{t}"))
+        nodes.extend(
+            [
+                onnx.helper.make_node(
+                    "Gather",
+                    ["input", f"time_idx_{t}"],
+                    [f"x_t_{t}"],
+                    axis=1,
+                ),
+                onnx.helper.make_node("MatMul", [f"x_t_{t}", "W_in_T"], [f"in_proj_{t}"]),
+                onnx.helper.make_node("MatMul", [prev_state, "W_T"], [f"rec_proj_{t}"]),
+                onnx.helper.make_node("Add", [f"in_proj_{t}", f"rec_proj_{t}"], [f"preact_{t}"]),
+                onnx.helper.make_node("Tanh", [f"preact_{t}"], [f"candidate_{t}"]),
+                onnx.helper.make_node("Mul", [prev_state, "one_minus_leak"], [f"prev_scaled_{t}"]),
+                onnx.helper.make_node("Mul", [f"candidate_{t}", "leak"], [f"candidate_scaled_{t}"]),
+                onnx.helper.make_node("Add", [f"prev_scaled_{t}", f"candidate_scaled_{t}"], [f"state_{t}"]),
+            ]
+        )
+        prev_state = f"state_{t}"
+        if t >= int(washout):
+            kept_states.append(prev_state)
+
+    if not kept_states:
+        kept_states = [prev_state]
+
+    last_state = kept_states[-1]
+    summary_inputs = [last_state]
+    if state_summary in {"last_mean", "last_mean_std"}:
+        unsqueezed = []
+        for idx, state_name in enumerate(kept_states):
+            out_name = f"state_seq_{idx}"
+            nodes.append(onnx.helper.make_node("Unsqueeze", [state_name, "axis_0"], [out_name]))
+            unsqueezed.append(out_name)
+        nodes.append(onnx.helper.make_node("Concat", unsqueezed, ["states_seq"], axis=0))
+        nodes.append(onnx.helper.make_node("ReduceMean", ["states_seq"], ["states_mean"], axes=[0], keepdims=0))
+        summary_inputs.append("states_mean")
+
+    if state_summary == "last_mean_std":
+        nodes.extend(
+            [
+                onnx.helper.make_node("Sub", ["states_seq", "states_mean"], ["states_centered"]),
+                onnx.helper.make_node("Mul", ["states_centered", "states_centered"], ["states_var_terms"]),
+                onnx.helper.make_node("ReduceMean", ["states_var_terms"], ["states_var"], axes=[0], keepdims=0),
+                onnx.helper.make_node("Sqrt", ["states_var"], ["states_std"]),
+            ]
+        )
+        summary_inputs.append("states_std")
+    elif state_summary != "last" and state_summary != "last_mean":
+        raise ValueError(f"state_summary inconnu: {state_summary}")
+
+    if len(summary_inputs) == 1:
+        nodes.append(onnx.helper.make_node("Identity", [summary_inputs[0]], ["summary"]))
+    else:
+        nodes.append(onnx.helper.make_node("Concat", summary_inputs, ["summary"], axis=1))
+
+    nodes.extend(
+        [
+            onnx.helper.make_node("Sub", ["summary", "feature_mean"], ["summary_centered"]),
+            onnx.helper.make_node("Div", ["summary_centered", "feature_scale"], ["summary_scaled_raw"]),
+            onnx.helper.make_node("Clip", ["summary_scaled_raw", "clip_min", "clip_max"], ["summary_scaled"]),
+            onnx.helper.make_node("Gemm", ["summary_scaled", "Wout", "bias"], ["logits"], alpha=1.0, beta=1.0),
+            onnx.helper.make_node("Softmax", ["logits"], ["probability_tensor"], axis=1),
+            onnx.helper.make_node("ArgMax", ["logits"], ["label_tensor"], axis=1, keepdims=0),
+        ]
+    )
+
+    graph = onnx.helper.make_graph(
+        nodes,
+        model_name,
+        [onnx.helper.make_tensor_value_info("input", onnx.TensorProto.FLOAT, [None, window_size, n_features])],
+        [
+            onnx.helper.make_tensor_value_info("probability_tensor", onnx.TensorProto.FLOAT, [None, num_classes]),
+            onnx.helper.make_tensor_value_info("label_tensor", onnx.TensorProto.INT64, [None]),
+        ],
+        initializers,
+    )
+    model = onnx.helper.make_model(
+        graph,
+        producer_name=f"{MODEL_NAME}_manual_export",
+        opset_imports=[onnx.helper.make_operatorsetid("", 15)],
+    )
+    onnx.checker.check_model(model)
+    if feature_dim != Wout.shape[0]:
+        raise ValueError(f"Dimension feature scaler/readout incoherente: {feature_dim} != {Wout.shape[0]}")
+    return model
+
+
+def _extract_raw_windows_sample(df, window_size, step_size, n_samples=None):
+    """
+    Extrait des fenetres BRUTES (avant reservoir), shape (n, window_size, n_features).
+    A la difference de base.extract_esn_windows qui retourne les features deja resumees
+    par le reservoir, cette fonction retourne les fenetres telles quelles, necessaires
+    pour alimenter le graphe ONNX (qui embarque lui-meme la recurrence) et pour valider
+    numeriquement ce graphe face au chemin reservoirpy reel.
+    Retourne aussi les labels correspondants (meme logique de vote majoritaire que
+    base._window_label), pour permettre le calcul de edge_metrics sur les memes echantillons.
+    """
+    df = base._sort_df(df)
+    raw_windows, raw_labels = [], []
+    for _, group in df.groupby([COL_PARTICIPANT, COL_SESSION], sort=False):
+        x_raw = group[SIGNAL_COLS].values.astype(np.float32)
+        y_raw = group[COL_LABEL].values
+        for start in range(0, len(x_raw) - window_size + 1, step_size):
+            end = start + window_size
+            y_window = y_raw[start:end]
+            if np.isnan(y_window).any():
+                continue
+            raw_windows.append(x_raw[start:end])
+            raw_labels.append(base._window_label(y_window.astype(np.int32)))
+            if n_samples is not None and len(raw_windows) >= n_samples:
+                return (
+                    np.asarray(raw_windows, dtype=np.float32),
+                    np.asarray(raw_labels, dtype=np.int32),
+                )
+    if not raw_windows:
+        return (
+            np.empty((0, window_size, len(SIGNAL_COLS)), dtype=np.float32),
+            np.array([], dtype=np.int32),
+        )
+    return np.asarray(raw_windows, dtype=np.float32), np.asarray(raw_labels, dtype=np.int32)
+
+
+def _missing_base_helpers():
+    required = [
+        "_extract_reservoir_weights",
+        "_validate_onnx_esn",
+        "_predict_onnx",
+        "_export_c_array_from_bytes",
+        "_compute_classification_metrics",
+        "_save_edge_comparison_metrics",
+    ]
+    return [name for name in required if not hasattr(base, name)]
+
+
+def _missing_base_helpers_for(names):
+    return [name for name in names if not hasattr(base, name)]
+
+
+def _validate_base_metric_helper():
+    expected_keys = {
+        "f1_macro",
+        "balanced_accuracy",
+        "precision_macro",
+        "recall_macro",
+        "precision_fatigue",
+        "recall_fatigue",
+    }
+    func = base._compute_classification_metrics
+    signature = inspect.signature(func)
+    if list(signature.parameters) != ["y_true", "y_pred"]:
+        raise TypeError(
+            "base._compute_classification_metrics doit avoir exactement la signature "
+            "(y_true, y_pred)"
+        )
+
+    sample_true = np.array([0, 1, 2, 3], dtype=np.int32)
+    sample_pred = np.array([0, 1, 2, 3], dtype=np.int32)
+    result = func(sample_true, sample_pred)
+    if not isinstance(result, dict):
+        raise TypeError("base._compute_classification_metrics doit retourner un dict")
+    actual_keys = set(result.keys())
+    if actual_keys != expected_keys:
+        raise ValueError(
+            "base._compute_classification_metrics doit retourner exactement les clés "
+            f"{sorted(expected_keys)}; reçu {sorted(actual_keys)}"
+        )
+
+
+def train_global_model(df_labeled, df_unlabeled, best_params):
+    print("\n" + "=" * 60 + f"\nMODELE GLOBAL - {MODEL_NAME}\n" + "=" * 60)
+
+    missing = _missing_base_helpers()
+    if missing:
+        print(f"  Modele global echoue : fonctions manquantes dans train_esn.py : {missing}")
+        return
+    try:
+        _validate_base_metric_helper()
+    except (TypeError, ValueError) as exc:
+        print(f"  Modele global echoue : {exc}")
+        return
+
+    config = WINDOW_CONFIGS["default"]
+    window_size, step_size = config["window_size"], config["step_size"]
+
+    df_all = df_labeled.copy()
     scaler = RobustScaler()
     df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
+    df_all = resample_dataframe(df_all, SIGNAL_COLS)
 
-    # Extraction ESN sur tout le dataset avant l'entrainement du readout RLS final.
     reservoir = base._build_reservoir(best_params, len(SIGNAL_COLS))
-    x_all, y_all = base.extract_esn_windows(df_all, reservoir, window_size, step_size)
-    if len(y_all) == 0:
-        print("  Aucun exemple global disponible.")
-        return
-    feature_scaler, x_all = fit_feature_scaler(x_all)
+    X_all, y_all = base.extract_esn_windows(df_all, reservoir, window_size, step_size)
+    print(f"  Fenêtres labellisées : {len(X_all)}")
 
-    model = build_model(best_params)
-    fit_readout(model, x_all, y_all)
+    model = None
+    try:
+        idx = np.random.default_rng(42).permutation(len(X_all))
+        split = int(0.9 * len(X_all))
+        X_tr_raw, y_tr = X_all[idx[:split]], y_all[idx[:split]]
+        X_vl_raw, y_vl = X_all[idx[split:]], y_all[idx[split:]]
 
-    models_dir = MODELS_DIR / MODEL_NAME
-    models_dir.mkdir(parents=True, exist_ok=True)
-    model_path = models_dir / f"{MODEL_NAME}_global.pkl"
-    # Le pickle contient le readout, le reservoir et les scalers necessaires a l'inference.
-    joblib.dump(
-        {
-            "model_name": MODEL_NAME,
-            "readout": model,
-            "reservoir": reservoir,
-            "scaler": scaler,
-            "feature_scaler": feature_scaler,
-            "signal_cols": SIGNAL_COLS,
-            "label_mapping": LABEL_MAPPING,
-            "target_names": TARGET_NAMES,
-            "window_size": window_size,
-            "step_size": step_size,
-            "params": best_params,
-        },
-        model_path,
-    )
-    print(f"  Modele global sauvegarde: {model_path}")
+        feature_scaler, X_tr = fit_feature_scaler(X_tr_raw)
+        X_vl = transform_features(feature_scaler, X_vl_raw)
+
+        model = build_model(best_params)
+        fit_readout(model, X_tr, y_tr)
+
+        # Pseudo-labeling
+        df_unl = df_unlabeled.copy()
+        if len(df_unl) > 0:
+            df_unl[SIGNAL_COLS] = scaler.transform(df_unl[SIGNAL_COLS])
+            X_unlabeled_raw, _ = base.extract_esn_windows(df_unl, reservoir, window_size, step_size)
+            if len(X_unlabeled_raw) > 0 and X_tr.shape[1] == X_unlabeled_raw.shape[1]:
+                X_unlabeled = transform_features(feature_scaler, X_unlabeled_raw)
+                proba_wrapper = _ReadoutProbaWrapper(model)
+                X_tr_v2, y_tr_v2, pseudo_y, _ = add_pseudo_labels(proba_wrapper, X_tr, y_tr, X_unlabeled)
+                if len(pseudo_y) > 0:
+                    _free_memory(model)
+                    model = build_model(best_params)
+                    fit_readout(model, X_tr_v2, y_tr_v2)
+
+        models_dir = MODELS_DIR / "ESN_RLS"
+        models_dir.mkdir(parents=True, exist_ok=True)
+
+        edge_metrics = {}
+
+        # Backup natif
+        pkl_path = None
+        try:
+            pkl_path = models_dir / f"{MODEL_NAME}_global.pkl"
+            joblib.dump({"reservoir": reservoir, "readout": model, "feature_scaler": feature_scaler}, pkl_path)
+            print(f"  Pickle backup : {pkl_path}")
+        except Exception as exc:
+            print(f"  Pickle backup échoué ({type(exc).__name__}: {exc})")
+            pkl_path = None
+
+        y_pred_native = predict_readout(model, X_vl_raw)
+        edge_metrics["native_esn_rls"] = base._compute_classification_metrics(y_vl, y_pred_native)
+        if pkl_path is not None and pkl_path.exists():
+            edge_metrics["native_esn_rls"]["model_size_kb"] = round(pkl_path.stat().st_size / 1024, 2)
+
+        # Export ONNX
+        try:
+            W_in, W, leak_rate = base._extract_reservoir_weights(reservoir)
+            print(f"  Wout.shape (reservoirpy RLS) : {model.Wout.shape}")
+            onnx_model = _build_onnx_esn_rls_graph(
+                W_in, W, leak_rate,
+                feature_scaler.mean_, feature_scaler.scale_, RLS_FEATURE_CLIP,
+                model.Wout, model.bias,
+                window_size, len(SIGNAL_COLS), int(best_params["n_reservoir"]),
+                len(LABEL_MAPPING), int(best_params.get("washout", 0)),
+                best_params.get("state_summary", "last_mean_std"),
+                f"{MODEL_NAME}_global"
+            )
+
+            # Extraire des fenetres brutes (avant reservoir) pour la validation et l'evaluation ONNX,
+            # car le graphe ONNX attend l'entree brute, pas les features deja resumees (X_vl_raw)
+            raw_windows_sample, raw_labels_sample = _extract_raw_windows_sample(
+                df_all, window_size, step_size, n_samples=20
+            )
+            if len(raw_windows_sample) > 0:
+                base._validate_onnx_esn(onnx_model, reservoir, model, raw_windows_sample)
+
+            onnx_path = models_dir / f"{MODEL_NAME}_global.onnx"
+            with open(onnx_path, "wb") as f:
+                f.write(onnx_model.SerializeToString())
+            print(f"  ONNX exporté : {onnx_path}")
+
+            base._export_c_array_from_bytes(onnx_path, models_dir, f"{MODEL_NAME}_global")
+
+            raw_windows_eval, raw_labels_eval = _extract_raw_windows_sample(
+                df_all, window_size, step_size, n_samples=None
+            )
+            if len(raw_windows_eval) > 0:
+                y_pred_onnx = base._predict_onnx(onnx_path, raw_windows_eval)
+                # Limitation : edge_metrics["onnx"] compare aux labels extraits des fenetres brutes
+                # (raw_labels_eval), pas au split validation 90/10 (y_vl) utilise pour native_esn_rls.
+                # La comparaison native vs onnx n'est donc pas parfaitement appariee echantillon par echantillon.
+                edge_metrics["onnx"] = base._compute_classification_metrics(raw_labels_eval, y_pred_onnx)
+                edge_metrics["onnx"]["model_size_kb"] = round(onnx_path.stat().st_size / 1024, 2)
+
+        except Exception as exc:
+            print(f"  Export ONNX échoué ({type(exc).__name__}: {exc})")
+            traceback.print_exc()
+
+        base._save_edge_comparison_metrics(MODEL_NAME, edge_metrics)
+        print(f"  Modèle global ESN_RLS traité (native + export ONNX si réussi).")
+
+    except Exception as exc:
+        print(f"  Modèle global échoué ({type(exc).__name__}: {exc})")
+        traceback.print_exc()
+    finally:
+        _free_memory(model)
+        gc.collect()
 
 
 # ============================================================================
@@ -378,18 +696,20 @@ def main():
         return print(f"Dataset non trouve: {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
-    # Mapping des labels originaux (-1, 0, 1) vers des indices compatibles avec One-Hot.
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
+    df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
+    df_labeled = df[df[COL_LABEL] >= 0].copy()
+    df_unlabeled = df[df[COL_LABEL] == -1].copy()
+    print(f"Labeled: {len(df_labeled)} lignes | Unlabeled: {len(df_unlabeled)} lignes")
 
     # Chaque couple participant/session devient un fold de test.
     unique_sessions = [
         tuple(map(int, x))
-        for x in df[df[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]]
+        for x in df_labeled[df_labeled[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]]
         .drop_duplicates()
         .values
     ]
 
-    best_params = optimize_hyperparams(df) if USE_OPTUNA_ESN_RLS else MODEL_PARAMS["ESN_RLS"]
+    best_params = optimize_hyperparams(df_labeled) if USE_OPTUNA_ESN_RLS else MODEL_PARAMS["ESN_RLS"]
     best_params = {**MODEL_PARAMS["ESN_RLS"], **best_params}
 
     all_metrics = []
@@ -403,8 +723,11 @@ def main():
         step_size = config["step_size"]
 
         # Split LOSO : la session test est completement exclue de l'entrainement.
-        df_train = df[~((df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess))].copy()
-        df_test = df[(df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess)].copy()
+        df_train = df_labeled[~((df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess))].copy()
+        df_test = df_labeled[(df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess)].copy()
+
+        # SMOTE seulement sur df_train, avant le scaling et l'extraction de features ESN.
+        df_train = resample_dataframe(df_train, SIGNAL_COLS)
 
         model = None
         try:
@@ -412,6 +735,10 @@ def main():
             scaler = RobustScaler()
             df_train[SIGNAL_COLS] = scaler.fit_transform(df_train[SIGNAL_COLS])
             df_test[SIGNAL_COLS] = scaler.transform(df_test[SIGNAL_COLS])
+
+            df_unlabeled_fit = df_unlabeled.copy()
+            if len(df_unlabeled_fit) > 0:
+                df_unlabeled_fit[SIGNAL_COLS] = scaler.transform(df_unlabeled_fit[SIGNAL_COLS])
 
             # Le reservoir extrait une representation temporelle fixe pour chaque fenetre.
             reservoir = base._build_reservoir(best_params, len(SIGNAL_COLS))
@@ -429,6 +756,21 @@ def main():
 
             model = build_model(best_params)
             fit_readout(model, x_train, y_train)
+
+            x_unlabeled, _ = (
+                base.extract_esn_windows(df_unlabeled_fit, reservoir, window_size, step_size)
+                if len(df_unlabeled_fit) > 0 else (np.empty((0, 0), dtype=np.float32), np.array([], dtype=np.int32))
+            )
+
+            if len(x_unlabeled) > 0 and x_train.shape[1] == x_unlabeled.shape[1]:
+                x_unlabeled = transform_features(feature_scaler, x_unlabeled)
+                proba_wrapper = _ReadoutProbaWrapper(model)
+                x_train_v2, y_train_v2, pseudo_y, _ = add_pseudo_labels(proba_wrapper, x_train, y_train, x_unlabeled)
+                if len(pseudo_y) > 0:
+                    _free_memory(model)
+                    model = build_model(best_params)
+                    fit_readout(model, x_train_v2, y_train_v2)
+
             y_pred = predict_readout(model, x_test)
 
             f1_mac = f1_score(y_test, y_pred, average="macro", zero_division=0)
@@ -509,7 +851,7 @@ def main():
     print(f"\nMetriques -> {METRICS_PATH}")
 
     # Entrainement final sur toutes les donnees apres l'evaluation LOSO.
-    train_global_model(df, best_params)
+    train_global_model(df_labeled, df_unlabeled, best_params)
 
 
 if __name__ == "__main__":

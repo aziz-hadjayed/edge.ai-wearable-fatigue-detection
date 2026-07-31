@@ -7,6 +7,7 @@ __author__ = "aziz-hadjayed"
 
 from .config import DATA_PROCESSED, DATA_RAW, MODEL_PARAMS
 from .data_prep import data_clean_1, clean_data_2, encode_features
+from .models.DL import train_cnn1
 
 __all__ = [
     "DATA_RAW",

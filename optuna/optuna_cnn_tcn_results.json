@@ -1,17 +1,17 @@
 {
-    "best_value": 0.8461832681084019,
+    "best_value": 0.8425354144603189,
     "best_params": {
         "batch_size": 32,
-        "cnn_filters": 64,
+        "cnn_filters": 128,
         "cnn_kernel": 5,
-        "n_tcn_blocks": 3,
+        "n_tcn_blocks": 2,
         "tcn_filters": 64,
         "tcn_kernel": 5,
-        "activation": "relu",
-        "l2_reg": 1.0407988654029368e-05,
-        "optimizer": "rmsprop",
-        "dense_units": 64,
-        "dropout_rate": 0.30275665469524965,
-        "learning_rate": 0.0003734774908783387
+        "activation": "leaky_relu",
+        "l2_reg": 4.432403359883197e-05,
+        "optimizer": "adam",
+        "dense_units": 32,
+        "dropout_rate": 0.4351190688786536,
+        "learning_rate": 0.0007577061214368326
     }
 }

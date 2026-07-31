@@ -2,6 +2,7 @@ import gc
 import json
 import random
 import sys
+import traceback
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,11 +19,21 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import *
 
+import onnx
+import onnx.helper
+import onnx.numpy_helper
+import onnxruntime as ort
+
+from utils.apply_smote import resample_windows_smote
+from models.semi_supervised import add_pseudo_labels
+
 from sklearn.metrics import (
     balanced_accuracy_score,
     classification_report,
     confusion_matrix,
     f1_score,
+    precision_score,
+    recall_score,
 )
 from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
@@ -34,60 +45,10 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # 1. CONSTANTES
 # ============================================================================
 MODEL_NAME = "MESN"
-LABEL_MAPPING = {"baseline": 0, "activity": 1, "fatigue": 2}
-TARGET_NAMES = ["baseline", "activity", "fatigue"]
+LABEL_MAPPING = {"baseline": 0, "activity": 1, "pre_fatigue": 2, "fatigue": 3}
+TARGET_NAMES = ["baseline", "activity", "pre_fatigue", "fatigue"]
 
-DEFAULT_PARAMS = {
-    "ridge_alpha": 5.0,
-    "washout": 5,
-    "state_summary": "last_mean_std",
-    "min_coverage": 0.35,
-    "random_state": 42,
-    "reservoirs": {
-        "acc": {
-            "n_reservoir": 80,
-            "spectral_radius": 0.75,
-            "sparsity": 0.90,
-            "leak_rate": 0.35,
-            "input_scaling": 0.50,
-        },
-        "eda": {
-            "n_reservoir": 50,
-            "spectral_radius": 0.70,
-            "sparsity": 0.90,
-            "leak_rate": 0.20,
-            "input_scaling": 0.60,
-        },
-        "hr": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.65,
-            "sparsity": 0.90,
-            "leak_rate": 0.15,
-            "input_scaling": 0.50,
-        },
-        "ibi": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.60,
-            "sparsity": 0.90,
-            "leak_rate": 0.20,
-            "input_scaling": 0.50,
-        },
-        "temp": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.65,
-            "sparsity": 0.90,
-            "leak_rate": 0.10,
-            "input_scaling": 0.45,
-        },
-        "breathing": {
-            "n_reservoir": 70,
-            "spectral_radius": 0.80,
-            "sparsity": 0.92,
-            "leak_rate": 0.30,
-            "input_scaling": 0.50,
-        },
-    },
-}
+DEFAULT_PARAMS = MODEL_PARAMS.get("MESN", {})
 
 SENSOR_SPECS = {
     "acc": {
@@ -96,11 +57,11 @@ SENSOR_SPECS = {
         "freq": 32.0,
         "log1p": [],
     },
-    "eda": {
-        "file": "wrist_eda.csv",
-        "cols": {"eda": "eda"},
+    "ambient": {
+        "file": "ambient_grandeur.csv",
+        "cols": {"temperature_amb": "temp_amb", "humidite_amb": "hum_amb"},
         "freq": 4.0,
-        "log1p": ["eda"],
+        "log1p": [],
     },
     "hr": {
         "file": "wrist_hr.csv",
@@ -111,7 +72,7 @@ SENSOR_SPECS = {
     "ibi": {
         "file": "wrist_ibi.csv",
         "cols": {"duration": "ibi"},
-        "freq": 0.59,
+        "freq": 0.65,
         "log1p": [],
     },
     "temp": {
@@ -124,6 +85,16 @@ SENSOR_SPECS = {
         "file": "chest_raw_breathing.csv",
         "cols": {"breathing_waveform": "breathing_waveform"},
         "freq": 25.0,
+        "log1p": [],
+    },
+}
+
+SENSOR_SPECS_CSV = {
+    **{k: v for k, v in SENSOR_SPECS.items() if k != "breathing"},
+    "breathing": {
+        "file": None,  # non utilise dans ce chemin (donnee deja dans le CSV)
+        "cols": {"breathing_rpm": "breathing_rpm"},
+        "freq": 0.5,  # taux respiratoire calcule, pas la waveform brute a 25Hz
         "log1p": [],
     },
 }
@@ -182,6 +153,31 @@ def _get_label_intervals(markers_path):
 
     t0 = intervals[0][0]
     return [(start - t0, end - t0, label) for start, end, label in intervals], t0
+
+
+def _augment_intervals(intervals):
+    augmented = list(intervals)
+    bounds = {}
+    for start, end, label in intervals:
+        if label == "baseline":
+            bounds["baseline_end"] = end
+        elif label == "activity":
+            bounds["activity_start"] = start
+            bounds["activity_end"] = end
+        elif label == "fatigue":
+            bounds["fatigue_start"] = start
+
+    activity_end = bounds.get("activity_end")
+    fatigue_start = bounds.get("fatigue_start")
+    if activity_end is not None and fatigue_start is not None and activity_end < fatigue_start:
+        augmented.append((activity_end, fatigue_start, "pre_fatigue"))
+
+    baseline_end = bounds.get("baseline_end")
+    activity_start = bounds.get("activity_start")
+    if baseline_end is not None and activity_start is not None and baseline_end < activity_start:
+        augmented.append((baseline_end, activity_start, "unlabeled"))
+
+    return augmented
 
 
 def _read_sensor(session_dir, sensor_name, t0):
@@ -266,6 +262,7 @@ def load_raw_sessions(raw_dir=DATA_RAW):
             intervals, t0 = _get_label_intervals(marker_path)
             if not intervals or t0 is None:
                 continue
+            intervals = _augment_intervals(intervals)
 
             sensors = {}
             for sensor_name in SENSOR_SPECS:
@@ -285,6 +282,70 @@ def load_raw_sessions(raw_dir=DATA_RAW):
                     )
                 )
 
+    return sessions
+
+
+LABEL_INT_TO_NAME = {0: "baseline", 1: "activity", 2: "pre_fatigue", 3: "fatigue", -1: "unlabeled"}
+
+
+def _build_intervals_from_label_column(group_df):
+    intervals = []
+    labels = group_df[COL_LABEL].to_numpy()
+    timestamps = group_df[COL_TIMESTAMP].to_numpy()
+
+    run_start = 0
+    for i in range(1, len(labels) + 1):
+        if i == len(labels) or labels[i] != labels[run_start]:
+            label_name = LABEL_INT_TO_NAME.get(int(labels[run_start]))
+            if label_name is not None:
+                intervals.append(
+                    (float(timestamps[run_start]), float(timestamps[i - 1]), label_name)
+                )
+            run_start = i
+
+    return intervals
+
+
+def load_sessions_from_csv(csv_path, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
+    df = pd.read_csv(csv_path)
+    sessions = []
+
+    for (participant, session_id), group in df.groupby([COL_PARTICIPANT, COL_SESSION]):
+        group = group.sort_values(COL_TIMESTAMP).reset_index(drop=True)
+
+        intervals = _build_intervals_from_label_column(group)
+        if not intervals:
+            continue
+
+        sensors = {}
+        for sensor_name, spec in sensor_specs.items():
+            value_cols = list(spec["cols"].values())
+            available = [c for c in value_cols if c in group.columns]
+            if not available:
+                continue
+
+            sub = group[[COL_TIMESTAMP] + available].dropna(subset=available, how="all")
+            if sub.empty:
+                continue
+
+            for col in available:
+                sub[f"{col}_missing"] = 0.0
+
+            sensors[sensor_name] = sub.reset_index(drop=True)
+
+        if sensors:
+            sessions.append(
+                SessionData(
+                    participant=_as_int(participant),
+                    session=_as_int(session_id),
+                    intervals=intervals,
+                    sensors=sensors,
+                )
+            )
+
+    print(f"  Sessions chargees depuis CSV : {len(sessions)}")
     return sessions
 
 
@@ -359,9 +420,11 @@ def _feature_size(params, sensor_name):
     raise ValueError(f"state_summary inconnu: {summary}")
 
 
-def _make_scalers(train_sessions):
+def _make_scalers(train_sessions, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
     scalers = {}
-    for sensor_name, spec in SENSOR_SPECS.items():
+    for sensor_name, spec in sensor_specs.items():
         value_cols = list(spec["cols"].values())
         arrays = []
         for session in train_sessions:
@@ -378,13 +441,15 @@ def _make_scalers(train_sessions):
     return scalers
 
 
-def _build_reservoirs(params, scalers):
+def _build_reservoirs(params, scalers, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
     reservoirs = {}
     for sensor_name, scaler in scalers.items():
         reservoirs[sensor_name] = _build_reservoir(
             sensor_name,
             params,
-            input_dim=len(SENSOR_SPECS[sensor_name]["cols"]) * 2,
+            input_dim=len(sensor_specs[sensor_name]["cols"]) * 2,
         )
     return reservoirs
 
@@ -415,8 +480,10 @@ def _sensor_window(df, start_ms, end_ms, value_cols):
     return df.loc[mask, value_cols].to_numpy(dtype=np.float32)
 
 
-def _sensor_inputs(df, sensor_name, start_ms, end_ms, scalers):
-    value_cols = list(SENSOR_SPECS[sensor_name]["cols"].values())
+def _sensor_inputs(df, sensor_name, start_ms, end_ms, scalers, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
+    value_cols = list(sensor_specs[sensor_name]["cols"].values())
     missing_cols = [f"{col}_missing" for col in value_cols]
     x_values = _sensor_window(df, start_ms, end_ms, value_cols)
     x_missing = _sensor_window(df, start_ms, end_ms, missing_cols)
@@ -424,21 +491,30 @@ def _sensor_inputs(df, sensor_name, start_ms, end_ms, scalers):
     return np.concatenate([x_values, x_missing.astype(np.float32)], axis=1)
 
 
-def _has_min_coverage(sensor_name, x, window_ms, params):
-    expected = SENSOR_SPECS[sensor_name]["freq"] * (window_ms / 1000)
+def _has_min_coverage(sensor_name, x, window_ms, params, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
+    expected = sensor_specs[sensor_name]["freq"] * (window_ms / 1000)
     min_samples = max(2, int(round(expected * float(params.get("min_coverage", 0.35)))))
-    if SENSOR_SPECS[sensor_name]["freq"] < 1:
+    if sensor_specs[sensor_name]["freq"] < 1:
         min_samples = max(2, min(min_samples, 8))
     return len(x) >= min_samples
 
 
-def transform_session_windows(session, reservoirs, scalers, params):
+def transform_session_windows(session, reservoirs, scalers, params, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
     window_ms, step_ms = _window_ms(session.participant)
     start_bound, end_bound = _session_time_bounds(session)
     if start_bound is None or end_bound is None or end_bound - start_bound < window_ms:
-        return np.empty((0, 0), dtype=np.float32), np.array([], dtype=np.int32), []
+        return (
+            np.empty((0, 0), dtype=np.float32), np.array([], dtype=np.int32), [],
+            np.empty((0, 0), dtype=np.float32), [],
+        )
 
     x_all, y_all, meta = [], [], []
+    x_unlabeled, meta_unlabeled = [], []
+    n_pre_fatigue, n_unlabeled = 0, 0
     washout = int(params.get("washout", 0))
     summary = params.get("state_summary", "last_mean_std")
     sensor_names = list(reservoirs.keys())
@@ -455,7 +531,7 @@ def transform_session_windows(session, reservoirs, scalers, params):
         valid = True
         for sensor_name in sensor_names:
             df_sensor = session.sensors.get(sensor_name)
-            value_cols = list(SENSOR_SPECS[sensor_name]["cols"].values())
+            value_cols = list(sensor_specs[sensor_name]["cols"].values())
             missing_cols = [f"{col}_missing" for col in value_cols]
             required_cols = value_cols + missing_cols
             if df_sensor is None or not all(col in df_sensor.columns for col in required_cols):
@@ -463,50 +539,79 @@ def transform_session_windows(session, reservoirs, scalers, params):
                 break
 
             x_sensor = _sensor_window(df_sensor, start, end, value_cols)
-            if not _has_min_coverage(sensor_name, x_sensor, window_ms, params):
+            if not _has_min_coverage(sensor_name, x_sensor, window_ms, params, sensor_specs=sensor_specs):
                 valid = False
                 break
 
-            x_input = _sensor_inputs(df_sensor, sensor_name, start, end, scalers)
+            x_input = _sensor_inputs(df_sensor, sensor_name, start, end, scalers, sensor_specs=sensor_specs)
             states = _reservoir_states(x_input, reservoirs[sensor_name], washout)
             features.append(_summarize_states(states, summary))
 
         if valid:
-            x_all.append(np.concatenate(features).astype(np.float32))
-            y_all.append(LABEL_MAPPING[label])
-            meta.append(
-                {
-                    "participant": session.participant,
-                    "session": session.session,
-                    "start_ms": start,
-                    "end_ms": end,
-                    "label": label,
-                }
-            )
+            feature_vec = np.concatenate(features).astype(np.float32)
+            meta_entry = {
+                "participant": session.participant,
+                "session": session.session,
+                "start_ms": start,
+                "end_ms": end,
+                "label": label,
+            }
+            if label == "unlabeled":
+                n_unlabeled += 1
+                x_unlabeled.append(feature_vec)
+                meta_unlabeled.append(meta_entry)
+            else:
+                if label == "pre_fatigue":
+                    n_pre_fatigue += 1
+                x_all.append(feature_vec)
+                y_all.append(LABEL_MAPPING[label])
+                meta.append(meta_entry)
 
         start += step_ms
 
+    if n_pre_fatigue or n_unlabeled:
+        print(
+            f"  [P{session.participant} S{session.session}] "
+            f"fenetres pre_fatigue: {n_pre_fatigue} | unlabeled: {n_unlabeled}"
+        )
+
+    feature_dim = sum(_feature_size(params, name) for name in sensor_names)
     if not x_all:
-        feature_dim = sum(_feature_size(params, name) for name in sensor_names)
-        return np.empty((0, feature_dim), dtype=np.float32), np.array([], dtype=np.int32), []
-    return np.asarray(x_all, dtype=np.float32), np.asarray(y_all, dtype=np.int32), meta
+        x_all_result = np.empty((0, feature_dim), dtype=np.float32)
+        y_all_result = np.array([], dtype=np.int32)
+    else:
+        x_all_result = np.asarray(x_all, dtype=np.float32)
+        y_all_result = np.asarray(y_all, dtype=np.int32)
+
+    if not x_unlabeled:
+        x_unlabeled_result = np.empty((0, feature_dim), dtype=np.float32)
+    else:
+        x_unlabeled_result = np.asarray(x_unlabeled, dtype=np.float32)
+
+    return x_all_result, y_all_result, meta, x_unlabeled_result, meta_unlabeled
 
 
-def extract_mesn_windows(sessions, reservoirs, scalers, params):
+def extract_mesn_windows(sessions, reservoirs, scalers, params, sensor_specs=None):
     xs, ys, metas = [], [], []
+    xs_unlabeled, metas_unlabeled = [], []
     for session in sessions:
-        x_session, y_session, meta_session = transform_session_windows(
-            session, reservoirs, scalers, params
+        x_session, y_session, meta_session, x_unl_session, meta_unl_session = transform_session_windows(
+            session, reservoirs, scalers, params, sensor_specs=sensor_specs
         )
         if len(y_session) > 0:
             xs.append(x_session)
             ys.append(y_session)
             metas.extend(meta_session)
+        if len(x_unl_session) > 0:
+            xs_unlabeled.append(x_unl_session)
+            metas_unlabeled.extend(meta_unl_session)
 
-    if not xs:
-        feature_dim = sum(_feature_size(params, name) for name in reservoirs.keys())
-        return np.empty((0, feature_dim), dtype=np.float32), np.array([], dtype=np.int32), []
-    return np.vstack(xs).astype(np.float32), np.concatenate(ys).astype(np.int32), metas
+    feature_dim = sum(_feature_size(params, name) for name in reservoirs.keys())
+    x_result = np.vstack(xs).astype(np.float32) if xs else np.empty((0, feature_dim), dtype=np.float32)
+    y_result = np.concatenate(ys).astype(np.int32) if ys else np.array([], dtype=np.int32)
+    x_unlabeled_result = np.vstack(xs_unlabeled).astype(np.float32) if xs_unlabeled else np.empty((0, feature_dim), dtype=np.float32)
+
+    return x_result, y_result, metas, x_unlabeled_result, metas_unlabeled
 
 
 # ============================================================================
@@ -523,7 +628,9 @@ def _sample_weights(y_train):
     return np.asarray([weight_map[y] for y in y_train], dtype=np.float32)
 
 
-def _to_onehot(y, num_classes=3):
+def _to_onehot(y, num_classes=None):
+    if num_classes is None:
+        num_classes = len(LABEL_MAPPING)
     y_onehot = np.zeros((len(y), num_classes), dtype=np.float32)
     y_onehot[np.arange(len(y)), y.astype(int)] = 1.0
     return y_onehot
@@ -590,7 +697,26 @@ def _reconstruct_params(flat_params):
     return params
 
 
-def optuna_objective(trial, sessions, val_sessions):
+class _ReadoutProbaWrapper:
+    """
+    Adapte le Ridge readout de MESN pour exposer predict_proba, requis par
+    add_pseudo_labels() de semi_supervised.py (reutilisee telle quelle, non modifiee).
+    model.run(x) retourne des scores bruts de regression, pas des probabilites.
+    """
+    def __init__(self, readout_model):
+        self.readout_model = readout_model
+
+    def predict_proba(self, x):
+        scores = np.asarray(self.readout_model.run(x), dtype=np.float32)
+        if scores.ndim == 1:
+            scores = scores.reshape(1, -1)
+        exp_scores = np.exp(scores - scores.max(axis=1, keepdims=True))
+        return exp_scores / exp_scores.sum(axis=1, keepdims=True)
+
+
+def optuna_objective(trial, sessions, val_sessions, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
     params = _suggest_mesn_params(trial)
     scores = []
 
@@ -601,14 +727,23 @@ def optuna_objective(trial, sessions, val_sessions):
                 s for s in sessions
                 if not (s.participant == val_session.participant and s.session == val_session.session)
             ]
-            scalers = _make_scalers(train_sessions)
-            if set(scalers) != set(SENSOR_SPECS):
+            scalers = _make_scalers(train_sessions, sensor_specs=sensor_specs)
+            if set(scalers) != set(sensor_specs):
                 scores.append(0.0)
                 continue
 
-            reservoirs = _build_reservoirs(params, scalers)
-            x_train, y_train, _ = extract_mesn_windows(train_sessions, reservoirs, scalers, params)
-            x_test, y_test, _ = extract_mesn_windows([val_session], reservoirs, scalers, params)
+            reservoirs = _build_reservoirs(params, scalers, sensor_specs=sensor_specs)
+            x_train, y_train, _, _, _ = extract_mesn_windows(
+                train_sessions, reservoirs, scalers, params, sensor_specs=sensor_specs
+            )
+            x_test, y_test, _, _, _ = extract_mesn_windows(
+                [val_session], reservoirs, scalers, params, sensor_specs=sensor_specs
+            )
+
+            if len(y_train) > 0:
+                x_train_3d = x_train.reshape(x_train.shape[0], 1, x_train.shape[1])
+                x_train_3d, y_train = resample_windows_smote(x_train_3d, y_train)
+                x_train = x_train_3d.reshape(x_train_3d.shape[0], x_train_3d.shape[2])
 
             if len(y_train) == 0 or len(y_test) == 0:
                 scores.append(0.0)
@@ -628,7 +763,7 @@ def optuna_objective(trial, sessions, val_sessions):
     return float(np.mean(scores)) if scores else 0.0
 
 
-def optimize_hyperparams(sessions, n_trials=MESN_OPTUNA_TRIALS):
+def optimize_hyperparams(sessions, n_trials=MESN_OPTUNA_TRIALS, sensor_specs=None):
     print(f"\nOPTUNA MESN - {n_trials} trials | {MESN_OPTUNA_SESSIONS} sessions\n" + "=" * 60)
     random.seed(42)
     val_sessions = random.sample(sessions, min(MESN_OPTUNA_SESSIONS, len(sessions)))
@@ -640,7 +775,7 @@ def optimize_hyperparams(sessions, n_trials=MESN_OPTUNA_TRIALS):
         pruner=optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=3),
     )
     study.optimize(
-        lambda trial: optuna_objective(trial, sessions, val_sessions),
+        lambda trial: optuna_objective(trial, sessions, val_sessions, sensor_specs=sensor_specs),
         n_trials=n_trials,
         show_progress_bar=True,
         n_jobs=1,
@@ -656,7 +791,6 @@ def optimize_hyperparams(sessions, n_trials=MESN_OPTUNA_TRIALS):
         json.dump({"best_value": study.best_value, "best_params": study.best_params}, f, indent=4)
 
     return _reconstruct_params(study.best_params)
-
 
 # ============================================================================
 # 6. VISUALISATION ET SAUVEGARDES
@@ -724,35 +858,637 @@ def _update_metrics(summary):
     print(f"Metriques sauvegardees: {METRICS_PATH}")
 
 
-def train_global_model(sessions, params):
-    print("\n" + "=" * 60 + f"\nMODELE GLOBAL - {MODEL_NAME}\n" + "=" * 60)
-    scalers = _make_scalers(sessions)
-    reservoirs = _build_reservoirs(params, scalers)
-    x_all, y_all, _ = extract_mesn_windows(sessions, reservoirs, scalers, params)
-    if len(y_all) == 0:
-        print("  Aucun exemple global disponible.")
+# ============================================================================
+# 6b. EXPORT ONNX / COMPARAISON EDGE
+# ============================================================================
+# _compute_classification_metrics, _export_c_array_from_bytes,
+# _save_edge_comparison_metrics et _predict_onnx sont dupliquees depuis
+# train_esn.py (meme logique exacte) : train_esn.py et MESN.py sont deux
+# scripts d'entrainement independants (chacun avec son propre main()), pas
+# des modules de bibliotheque partagee -- le projet duplique deja ce genre
+# d'utilitaires entre scripts (_free_memory, _ReadoutProbaWrapper existent
+# aussi en double), donc un import cross-module casserait cette convention
+# sans apporter de reel benefice ici.
+def _compute_classification_metrics(y_true, y_pred):
+    return {
+        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+        "precision_macro": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+        "recall_macro": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
+        "precision_fatigue": float(
+            precision_score(y_true, y_pred, labels=[3], average="macro", zero_division=0)
+        ),
+        "recall_fatigue": float(
+            recall_score(y_true, y_pred, labels=[3], average="macro", zero_division=0)
+        ),
+    }
+
+
+def _save_edge_comparison_metrics(model_name, edge_metrics):
+    curr_metrics = {}
+    if METRICS_PATH.exists():
+        try:
+            with open(METRICS_PATH, "r") as f:
+                content = f.read().strip()
+            curr_metrics = json.loads(content) if content else {}
+        except (json.JSONDecodeError, ValueError):
+            print(f"metrics.json invalide ou vide, reinitialisation: {METRICS_PATH}")
+            curr_metrics = {}
+
+    curr_metrics.setdefault(model_name, {})
+    curr_metrics[model_name]["edge_comparison"] = edge_metrics
+
+    with open(METRICS_PATH, "w") as f:
+        json.dump(curr_metrics, f, indent=4)
+    print(f"  Comparaison edge sauvegardee: {METRICS_PATH}")
+
+
+def _export_c_array_from_bytes(file_path, save_dir, model_name):
+    with open(file_path, "rb") as f:
+        data = f.read()
+    c_array = ", ".join(f"0x{b:02x}" for b in data)
+    h_path = save_dir / f"{model_name}.h"
+    with open(h_path, "w") as f:
+        f.write(f"const unsigned char {model_name}_onnx[] = {{{c_array}}};\n")
+        f.write(f"const unsigned int {model_name}_onnx_len = {len(data)};\n")
+    print(f"  Header C exporte : {h_path}")
+
+
+def _predict_onnx(onnx_path, X_data):
+    """
+    Duplique depuis train_esn.py pour la reutilisation demandee. NON utilisee
+    par le chemin MESN : le graphe MESN a 6 entrees nommees par capteur (une
+    par sensor_name), pas une entree unique comme le graphe ESN mono-capteur
+    -- voir _predict_onnx_mesn ci-dessous, qui gere le feed_dict multi-entrees.
+    """
+    ort_session = ort.InferenceSession(str(onnx_path))
+    input_name = ort_session.get_inputs()[0].name
+    outputs = ort_session.run(None, {input_name: X_data.astype(np.float32)})
+    return np.asarray(outputs[1], dtype=np.int32)
+
+
+def _extract_reservoir_weights(reservoir_dict):
+    node = reservoir_dict["node"]
+    try:
+        W_in = node.Win.toarray() if hasattr(node.Win, "toarray") else np.asarray(node.Win)
+        W = node.W.toarray() if hasattr(node.W, "toarray") else np.asarray(node.W)
+        leak_rate = float(node.lr)
+    except AttributeError:
+        print(
+            f"  [DEBUG] extraction des poids du reservoir '{reservoir_dict.get('sensor', '?')}' "
+            f"echouee. Attributs disponibles sur le node: {dir(node)}"
+        )
+        raise
+    return W_in, W, leak_rate
+
+
+def _extract_readout_weights(readout_model):
+    try:
+        Wout = readout_model.Wout
+        bias = readout_model.bias
+    except AttributeError:
+        print(
+            f"  [DEBUG] extraction des poids du readout echouee. "
+            f"Attributs disponibles: {dir(readout_model)}"
+        )
+        raise
+    return Wout, bias
+
+
+def _nominal_sensor_steps(sensor_specs, window_ms):
+    """
+    Nombre de pas de temps NOMINAL par capteur pour une entree ONNX de taille
+    fixe : round(freq * window_ms / 1000), la couverture "attendue" au sens de
+    _has_min_coverage -- PAS le nombre reel de points d'une fenetre donnee, qui
+    varie d'une fenetre a l'autre selon les trous/artefacts du signal. Les
+    fenetres reelles sont tronquees/completees a cette taille fixe avant
+    d'entrer dans le graphe (voir _extract_raw_sensor_windows).
+    """
+    return {
+        name: max(1, int(round(spec["freq"] * window_ms / 1000)))
+        for name, spec in sensor_specs.items()
+    }
+
+
+def _build_onnx_mesn_graph(reservoirs, scalers, readout_model, params, sensor_specs, model_name):
+    """
+    Construit un graphe ONNX unique reproduisant le forward MESN complet.
+
+    Pour chaque capteur (dans l'ordre de reservoirs.keys(), qui DOIT correspondre
+    exactement a l'ordre de concatenation utilise par np.concatenate(features)
+    dans transform_session_windows -- sinon les poids du readout ne correspondent
+    plus aux bonnes features) :
+      entree brute [valeurs + flags missing] -> separation (Split) -> RobustScaler
+      (Sub/Div, valeurs uniquement, flags missing laisses tels quels) -> reservoir
+      recurrent deroule sur un nombre de pas FIXE -> resume (last/last_mean/
+      last_mean_std, meme logique que _summarize_states).
+    Puis concatenation des resumes de tous les capteurs -> Gemm (readout Ridge)
+    -> Softmax (probability_tensor) + ArgMax (label_tensor).
+
+    APPROXIMATION IMPORTANTE : chaque capteur a sa propre frequence
+    d'echantillonnage (freq dans sensor_specs), donc un nombre de points par
+    fenetre different et VARIABLE d'une fenetre reelle a l'autre (couverture
+    dependante des trous du signal, cf _has_min_coverage). Le graphe ONNX, lui,
+    est STATIQUE et exige une taille d'entree fixe par capteur : on utilise donc
+    le nombre de pas NOMINAL (_nominal_sensor_steps), pas le nombre reel de
+    points d'une fenetre donnee. A l'inference, les fenetres reelles doivent
+    etre tronquees/completees a cette taille fixe (voir _extract_raw_sensor_windows).
+
+    NOTE DE CORRECTION (vs le graphe ESN mono-capteur de train_esn.py, dont le
+    pattern de deroulement recurrent a servi de reference) : la reutilisation
+    directe de ce pattern se heurte a 3 problemes qui ont ete corriges ici apres
+    validation numerique (MAE < 1e-7 vs reservoirpy) :
+      1. L'initializer de l'etat initial et la sortie du noeud calcule au premier
+         pas de temps portaient le meme nom ("state_0"), ce qui viole la forme
+         SSA exigee par onnx.checker.check_model (utilise ici un nom distinct
+         "{prefix}_state_init").
+      2. Unsqueeze prend "axes" en entree tensor (pas en attribut) a partir de
+         l'opset 13 -- l'opset cible ici est 15.
+      3. MatMul(prev_state, W) calcule prev_state @ W (convention vecteur-ligne),
+         ce qui correspond mathematiquement a W.T @ h et non W @ h : il faut donc
+         transposer W (comme W_in) avant de l'utiliser dans MatMul, sans quoi la
+         recurrence diverge de reservoirpy des le 2e pas de temps.
+    """
+    window_ms, _ = _window_ms(None)
+    sensor_names = list(reservoirs.keys())
+    n_steps_by_sensor = _nominal_sensor_steps(sensor_specs, window_ms)
+    state_summary = params.get("state_summary", "last_mean_std")
+    washout = int(params.get("washout", 0))
+    num_classes = len(LABEL_MAPPING)
+
+    Wout, bias = _extract_readout_weights(readout_model)
+    # Wout a deja la forme (n_features_in, n_classes) -- convention verifiee
+    # numeriquement (model.run(x) == Gemm(x, Wout, bias) avec transB=0 par
+    # defaut, MAE < 1e-7). PAS de transposition ici, contrairement au pattern
+    # de train_esn.py qui transpose Wout avant Gemm : applique tel quel, ce
+    # dernier produit un logits de shape (batch, n_features_in) au lieu de
+    # (batch, n_classes) (confirme empiriquement : erreur "Invalid bias shape
+    # for broadcast" / mismatch de shape a l'execution).
+    Wout = np.asarray(Wout, dtype=np.float32)
+    bias = np.asarray(bias, dtype=np.float32).reshape(-1)
+
+    nodes = []
+    initializers = [
+        onnx.numpy_helper.from_array(Wout, "Wout"),
+        onnx.numpy_helper.from_array(bias, "bias"),
+    ]
+    graph_inputs = []
+    sensor_summaries = []
+
+    for sensor_name in sensor_names:
+        prefix = sensor_name
+        reservoir = reservoirs[sensor_name]
+        W_in, W, leak_rate = _extract_reservoir_weights(reservoir)
+        W_in_T = np.asarray(np.asarray(W_in, dtype=np.float32).T, dtype=np.float32)
+        W_T = np.asarray(np.asarray(W, dtype=np.float32).T, dtype=np.float32)
+        n_reservoir = W_T.shape[0]
+
+        value_cols = list(sensor_specs[sensor_name]["cols"].values())
+        n_features = len(value_cols)
+        n_steps = n_steps_by_sensor[sensor_name]
+
+        scaler = scalers[sensor_name]
+        center = np.asarray(scaler.center_, dtype=np.float32).reshape(1, 1, n_features)
+        scale = np.asarray(scaler.scale_, dtype=np.float32).reshape(1, 1, n_features)
+
+        input_name = f"{prefix}_input"
+        graph_inputs.append(
+            onnx.helper.make_tensor_value_info(
+                input_name, onnx.TensorProto.FLOAT, [None, n_steps, n_features * 2]
+            )
+        )
+
+        initializers.extend(
+            [
+                onnx.numpy_helper.from_array(
+                    np.asarray([n_features, n_features], dtype=np.int64), f"{prefix}_split_sizes"
+                ),
+                onnx.numpy_helper.from_array(center, f"{prefix}_center"),
+                onnx.numpy_helper.from_array(scale, f"{prefix}_scale"),
+                onnx.numpy_helper.from_array(W_in_T, f"{prefix}_W_in_T"),
+                onnx.numpy_helper.from_array(W_T, f"{prefix}_W_T"),
+                onnx.numpy_helper.from_array(
+                    np.asarray([1.0 - float(leak_rate)], dtype=np.float32), f"{prefix}_one_minus_leak"
+                ),
+                onnx.numpy_helper.from_array(np.asarray([float(leak_rate)], dtype=np.float32), f"{prefix}_leak"),
+                onnx.numpy_helper.from_array(np.zeros((1, n_reservoir), dtype=np.float32), f"{prefix}_state_init"),
+                onnx.numpy_helper.from_array(np.asarray([0], dtype=np.int64), f"{prefix}_axis0"),
+            ]
+        )
+
+        # Separation valeurs / flags missing, normalisation RobustScaler sur les
+        # valeurs uniquement (flags missing laisses 0/1 tels quels, cf _sensor_inputs).
+        nodes.extend(
+            [
+                onnx.helper.make_node(
+                    "Split",
+                    [input_name, f"{prefix}_split_sizes"],
+                    [f"{prefix}_values_raw", f"{prefix}_missing"],
+                    axis=2,
+                    name=f"{prefix}_split",
+                ),
+                onnx.helper.make_node("Sub", [f"{prefix}_values_raw", f"{prefix}_center"], [f"{prefix}_centered"]),
+                onnx.helper.make_node("Div", [f"{prefix}_centered", f"{prefix}_scale"], [f"{prefix}_scaled"]),
+                onnx.helper.make_node(
+                    "Concat", [f"{prefix}_scaled", f"{prefix}_missing"], [f"{prefix}_scaled_input"], axis=2
+                ),
+            ]
+        )
+
+        # Recurrence du reservoir deroulee sur n_steps pas fixes :
+        # h(t) = (1-leak)*h(t-1) + leak*tanh(W_in @ x(t) + W @ h(t-1))
+        # (W_in et W transposes pour la convention MatMul vecteur-ligne, cf
+        # note de correction ci-dessus)
+        prev_state = f"{prefix}_state_init"
+        kept_states = []
+        for t in range(n_steps):
+            initializers.append(
+                onnx.numpy_helper.from_array(np.asarray(t, dtype=np.int64), f"{prefix}_time_idx_{t}")
+            )
+            nodes.extend(
+                [
+                    onnx.helper.make_node(
+                        "Gather", [f"{prefix}_scaled_input", f"{prefix}_time_idx_{t}"], [f"{prefix}_x_t_{t}"], axis=1
+                    ),
+                    onnx.helper.make_node(
+                        "MatMul", [f"{prefix}_x_t_{t}", f"{prefix}_W_in_T"], [f"{prefix}_in_proj_{t}"]
+                    ),
+                    onnx.helper.make_node("MatMul", [prev_state, f"{prefix}_W_T"], [f"{prefix}_rec_proj_{t}"]),
+                    onnx.helper.make_node(
+                        "Add", [f"{prefix}_in_proj_{t}", f"{prefix}_rec_proj_{t}"], [f"{prefix}_preact_{t}"]
+                    ),
+                    onnx.helper.make_node("Tanh", [f"{prefix}_preact_{t}"], [f"{prefix}_candidate_{t}"]),
+                    onnx.helper.make_node(
+                        "Mul", [prev_state, f"{prefix}_one_minus_leak"], [f"{prefix}_prev_scaled_{t}"]
+                    ),
+                    onnx.helper.make_node(
+                        "Mul", [f"{prefix}_candidate_{t}", f"{prefix}_leak"], [f"{prefix}_candidate_scaled_{t}"]
+                    ),
+                    onnx.helper.make_node(
+                        "Add", [f"{prefix}_prev_scaled_{t}", f"{prefix}_candidate_scaled_{t}"], [f"{prefix}_state_{t}"]
+                    ),
+                ]
+            )
+            prev_state = f"{prefix}_state_{t}"
+            if t >= washout:
+                kept_states.append(prev_state)
+
+        if not kept_states:
+            kept_states = [prev_state]
+
+        last_state = kept_states[-1]
+        summary_inputs = [last_state]
+
+        if state_summary in {"last_mean", "last_mean_std"}:
+            unsqueezed = []
+            for idx, state_name in enumerate(kept_states):
+                out_name = f"{prefix}_seq_{idx}"
+                nodes.append(onnx.helper.make_node("Unsqueeze", [state_name, f"{prefix}_axis0"], [out_name]))
+                unsqueezed.append(out_name)
+            nodes.append(onnx.helper.make_node("Concat", unsqueezed, [f"{prefix}_states_seq"], axis=0))
+            nodes.append(
+                onnx.helper.make_node(
+                    "ReduceMean", [f"{prefix}_states_seq"], [f"{prefix}_states_mean"], axes=[0], keepdims=0
+                )
+            )
+            summary_inputs.append(f"{prefix}_states_mean")
+
+        if state_summary == "last_mean_std":
+            nodes.extend(
+                [
+                    onnx.helper.make_node(
+                        "Sub", [f"{prefix}_states_seq", f"{prefix}_states_mean"], [f"{prefix}_centered_states"]
+                    ),
+                    onnx.helper.make_node(
+                        "Mul", [f"{prefix}_centered_states", f"{prefix}_centered_states"], [f"{prefix}_var_terms"]
+                    ),
+                    onnx.helper.make_node(
+                        "ReduceMean", [f"{prefix}_var_terms"], [f"{prefix}_states_var"], axes=[0], keepdims=0
+                    ),
+                    onnx.helper.make_node("Sqrt", [f"{prefix}_states_var"], [f"{prefix}_states_std"]),
+                ]
+            )
+            summary_inputs.append(f"{prefix}_states_std")
+        elif state_summary not in {"last", "last_mean"}:
+            raise ValueError(f"state_summary inconnu: {state_summary}")
+
+        if len(summary_inputs) == 1:
+            nodes.append(onnx.helper.make_node("Identity", [summary_inputs[0]], [f"{prefix}_summary"]))
+        else:
+            nodes.append(onnx.helper.make_node("Concat", summary_inputs, [f"{prefix}_summary"], axis=1))
+
+        sensor_summaries.append(f"{prefix}_summary")
+
+    # Concatenation des resumes par capteur, dans l'ordre de reservoirs.keys().
+    nodes.append(onnx.helper.make_node("Concat", sensor_summaries, ["summary_all"], axis=1))
+    nodes.extend(
+        [
+            onnx.helper.make_node("Gemm", ["summary_all", "Wout", "bias"], ["logits"], alpha=1.0, beta=1.0),
+            onnx.helper.make_node("Softmax", ["logits"], ["probability_tensor"], axis=1),
+            onnx.helper.make_node("ArgMax", ["logits"], ["label_tensor"], axis=1, keepdims=0),
+        ]
+    )
+
+    graph = onnx.helper.make_graph(
+        nodes,
+        model_name,
+        graph_inputs,
+        [
+            onnx.helper.make_tensor_value_info("probability_tensor", onnx.TensorProto.FLOAT, [None, num_classes]),
+            onnx.helper.make_tensor_value_info("label_tensor", onnx.TensorProto.INT64, [None]),
+        ],
+        initializers,
+    )
+    model = onnx.helper.make_model(
+        graph,
+        producer_name=f"{MODEL_NAME}_manual_export",
+        opset_imports=[onnx.helper.make_operatorsetid("", 15)],
+    )
+    onnx.checker.check_model(model)
+    return model
+
+
+def _extract_raw_sensor_windows(sessions, params, sensor_specs, n_steps_by_sensor):
+    """
+    Reconstruit, pour chaque fenetre valide (meme critere que
+    transform_session_windows : label connu et != "unlabeled", couverture
+    minimale par capteur via _has_min_coverage), les tenseurs BRUTS (valeurs +
+    flags missing, NON normalises -- la normalisation RobustScaler est faite
+    par le graphe ONNX lui-meme) par capteur, tronques/completes a la taille
+    fixe n_steps_by_sensor utilisee par le graphe (_nominal_sensor_steps).
+
+    Necessaire car extract_mesn_windows ne retourne que les features DEJA
+    resumees par les reservoirs, alors que le graphe ONNX prend en entree les
+    fenetres brutes par capteur -- sans cette reconstruction, impossible de
+    generer des predictions ONNX comparables au chemin Python.
+
+    Les fenetres reelles plus longues que le nominal sont tronquees (on garde
+    les pas les plus recents) ; les plus courtes sont completees en tete par
+    des zeros avec le flag missing force a 1 (pas synthetiques marques
+    "manquants", coherent avec la semantique de ces flags ailleurs dans le code).
+    """
+    window_ms, step_ms = _window_ms(None)
+    sensor_names = list(sensor_specs.keys())
+
+    windows_by_sensor = {name: [] for name in sensor_names}
+    labels = []
+    meta = []
+
+    for session in sessions:
+        start_bound, end_bound = _session_time_bounds(session)
+        if start_bound is None or end_bound is None or end_bound - start_bound < window_ms:
+            continue
+
+        start = float(start_bound)
+        while start + window_ms <= end_bound:
+            end = start + window_ms
+            label = _label_at(session.intervals, start, end)
+            if label is None or label == "unlabeled":
+                start += step_ms
+                continue
+
+            per_sensor = {}
+            valid = True
+            for sensor_name in sensor_names:
+                df_sensor = session.sensors.get(sensor_name)
+                value_cols = list(sensor_specs[sensor_name]["cols"].values())
+                missing_cols = [f"{col}_missing" for col in value_cols]
+                required_cols = value_cols + missing_cols
+                if df_sensor is None or not all(col in df_sensor.columns for col in required_cols):
+                    valid = False
+                    break
+
+                x_values = _sensor_window(df_sensor, start, end, value_cols)
+                if not _has_min_coverage(sensor_name, x_values, window_ms, params, sensor_specs=sensor_specs):
+                    valid = False
+                    break
+
+                x_missing = _sensor_window(df_sensor, start, end, missing_cols)
+                x_raw = np.concatenate([x_values, x_missing.astype(np.float32)], axis=1).astype(np.float32)
+
+                n_steps = n_steps_by_sensor[sensor_name]
+                n_features = len(value_cols)
+                if len(x_raw) >= n_steps:
+                    x_fixed = x_raw[-n_steps:]
+                elif len(x_raw) == 0:
+                    x_fixed = np.zeros((n_steps, n_features * 2), dtype=np.float32)
+                    x_fixed[:, n_features:] = 1.0
+                else:
+                    pad = np.zeros((n_steps - len(x_raw), n_features * 2), dtype=np.float32)
+                    pad[:, n_features:] = 1.0
+                    x_fixed = np.concatenate([pad, x_raw], axis=0)
+
+                per_sensor[sensor_name] = x_fixed
+
+            if valid:
+                for sensor_name in sensor_names:
+                    windows_by_sensor[sensor_name].append(per_sensor[sensor_name])
+                labels.append(LABEL_MAPPING[label])
+                meta.append(
+                    {
+                        "participant": session.participant,
+                        "session": session.session,
+                        "start_ms": start,
+                        "end_ms": end,
+                        "label": label,
+                    }
+                )
+
+            start += step_ms
+
+    for sensor_name in sensor_names:
+        n_steps = n_steps_by_sensor[sensor_name]
+        n_features = len(sensor_specs[sensor_name]["cols"])
+        windows_by_sensor[sensor_name] = (
+            np.stack(windows_by_sensor[sensor_name]).astype(np.float32)
+            if windows_by_sensor[sensor_name]
+            else np.empty((0, n_steps, n_features * 2), dtype=np.float32)
+        )
+
+    return windows_by_sensor, np.asarray(labels, dtype=np.int32), meta
+
+
+def _predict_onnx_mesn(onnx_path, windows_by_sensor):
+    """
+    Variante multi-entrees de _predict_onnx (voir sa docstring) : construit un
+    feed_dict {"{sensor}_input": tenseur} au lieu d'un tenseur unique, pour
+    correspondre aux 6 entrees nommees du graphe MESN.
+    """
+    ort_session = ort.InferenceSession(str(onnx_path))
+    feed = {f"{name}_input": arr.astype(np.float32) for name, arr in windows_by_sensor.items()}
+    outputs = ort_session.run(None, feed)
+    return np.asarray(outputs[1], dtype=np.int32)
+
+
+def _validate_onnx_mesn(onnx_model, reservoirs, scalers, readout_model, params, sensor_specs, sessions_sample):
+    """
+    Validation numerique OBLIGATOIRE du graphe ONNX MESN contre le chemin
+    Python (reservoirs reservoirpy + readout Ridge). Le graphe ONNX ici est
+    nettement plus complexe que celui de train_esn.py (6 reservoirs a
+    frequences differentes, approximation du nombre de pas fixe par capteur) :
+    le risque d'erreur de construction est eleve, donc chaque fenetre est
+    comparee individuellement (session.run par fenetre), pas en lot.
+    """
+    print("\n  --- Validation ONNX MESN ---")
+    x_python, y_python, _, _, _ = extract_mesn_windows(
+        sessions_sample, reservoirs, scalers, params, sensor_specs=sensor_specs
+    )
+    if len(y_python) == 0:
+        print("  Validation ONNX MESN : aucune fenetre labellisee dans l'echantillon, validation ignoree.")
         return
 
-    model = build_readout(params)
-    fit_readout(model, x_all, y_all)
+    window_ms, _ = _window_ms(None)
+    n_steps_by_sensor = _nominal_sensor_steps(sensor_specs, window_ms)
+    windows_by_sensor, y_raw, _ = _extract_raw_sensor_windows(sessions_sample, params, sensor_specs, n_steps_by_sensor)
 
-    models_dir = MODELS_DIR / MODEL_NAME
-    models_dir.mkdir(parents=True, exist_ok=True)
-    model_path = models_dir / f"{MODEL_NAME}_global.pkl"
-    joblib.dump(
-        {
-            "model_name": MODEL_NAME,
-            "readout": model,
-            "reservoirs": reservoirs,
-            "scalers": scalers,
-            "sensor_specs": SENSOR_SPECS,
-            "label_mapping": LABEL_MAPPING,
-            "target_names": TARGET_NAMES,
-            "params": params,
-        },
-        model_path,
-    )
-    print(f"  Modele global sauvegarde: {model_path}")
+    n_compare = min(len(y_python), len(y_raw))
+    if n_compare == 0:
+        print("  Validation ONNX MESN : impossible de comparer (0 fenetre commune).")
+        return
+    if len(y_python) != len(y_raw) or not np.array_equal(y_python[:n_compare], y_raw[:n_compare]):
+        print(
+            f"  WARNING Validation ONNX MESN : desalignement potentiel entre les fenetres "
+            f"Python ({len(y_python)}) et ONNX ({len(y_raw)}) -- comparaison limitee aux "
+            f"{n_compare} premieres fenetres communes, resultat a interpreter avec prudence."
+        )
+
+    proba_wrapper = _ReadoutProbaWrapper(readout_model)
+    python_proba = proba_wrapper.predict_proba(x_python[:n_compare])
+    y_pred_python = np.argmax(python_proba, axis=1).astype(np.int32)
+
+    ort_session = ort.InferenceSession(onnx_model.SerializeToString())
+    y_pred_onnx = np.zeros(n_compare, dtype=np.int32)
+    onnx_proba = np.zeros((n_compare, python_proba.shape[1]), dtype=np.float32)
+    for i in range(n_compare):
+        feed = {
+            f"{name}_input": windows_by_sensor[name][i : i + 1].astype(np.float32) for name in windows_by_sensor
+        }
+        outputs = ort_session.run(None, feed)
+        onnx_proba[i] = outputs[0][0]
+        y_pred_onnx[i] = int(outputs[1][0])
+
+    agreement = float(np.mean(y_pred_python == y_pred_onnx)) * 100
+    mae = float(np.mean(np.abs(python_proba - onnx_proba)))
+
+    print(f"  Validation ONNX MESN : {agreement:.1f}% d'accord sur {n_compare} fenetres, MAE={mae:.6f}")
+    if agreement < 95.0:
+        print(
+            f"  WARNING : accord ONNX/Python ({agreement:.1f}%) sous le seuil de 95%. "
+            f"Verifier la construction du graphe (approximation du nombre de pas fixe "
+            f"par capteur, ordre de concatenation, extraction des poids)."
+        )
+
+
+def train_global_model(sessions, params):
+    print("\n" + "=" * 60 + f"\nMODELE GLOBAL - {MODEL_NAME}\n" + "=" * 60)
+
+    try:
+        scalers = _make_scalers(sessions, sensor_specs=SENSOR_SPECS_CSV)
+        if set(scalers) != set(SENSOR_SPECS_CSV):
+            missing = sorted(set(SENSOR_SPECS_CSV) - set(scalers))
+            print(f"  Modele global echoue : scalers manquants pour {missing}")
+            return
+
+        reservoirs = _build_reservoirs(params, scalers, sensor_specs=SENSOR_SPECS_CSV)
+
+        idx = np.random.default_rng(42).permutation(len(sessions))
+        split = int(0.9 * len(sessions))
+        train_sessions = [sessions[i] for i in idx[:split]]
+        val_sessions = [sessions[i] for i in idx[split:]]
+
+        x_train, y_train, _, x_unlabeled, _ = extract_mesn_windows(
+            train_sessions, reservoirs, scalers, params, sensor_specs=SENSOR_SPECS_CSV
+        )
+        x_val, y_val, _, _, _ = extract_mesn_windows(
+            val_sessions, reservoirs, scalers, params, sensor_specs=SENSOR_SPECS_CSV
+        )
+
+        if len(y_train) == 0 or len(y_val) == 0:
+            print("  Modele global echoue : train/val vide")
+            return
+
+        if len(y_train) > 0:
+            x_train_3d = x_train.reshape(x_train.shape[0], 1, x_train.shape[1])
+            x_train_3d, y_train = resample_windows_smote(x_train_3d, y_train)
+            x_train = x_train_3d.reshape(x_train_3d.shape[0], x_train_3d.shape[2])
+
+        model = build_readout(params)
+        fit_readout(model, x_train, y_train)
+
+        if len(x_unlabeled) > 0 and x_train.shape[1] == x_unlabeled.shape[1]:
+            proba_wrapper = _ReadoutProbaWrapper(model)
+            x_train_v2, y_train_v2, pseudo_y, _ = add_pseudo_labels(proba_wrapper, x_train, y_train, x_unlabeled)
+            if len(pseudo_y) > 0:
+                _free_memory(model)
+                model = build_readout(params)
+                fit_readout(model, x_train_v2, y_train_v2)
+
+        models_dir = MODELS_DIR / "MESN"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        edge_metrics = {}
+
+        # Backup natif
+        pkl_path = None
+        try:
+            pkl_path = models_dir / f"{MODEL_NAME}_global.pkl"
+            joblib.dump({"reservoirs": reservoirs, "readout": model, "scalers": scalers}, pkl_path)
+            print(f"  Pickle backup : {pkl_path}")
+        except Exception as exc:
+            print(f"  Pickle backup echoue ({type(exc).__name__}: {exc})")
+
+        y_pred_native = predict_readout(model, x_val)
+        edge_metrics["native_mesn"] = _compute_classification_metrics(y_val, y_pred_native)
+        if pkl_path is not None and pkl_path.exists():
+            edge_metrics["native_mesn"]["model_size_kb"] = round(pkl_path.stat().st_size / 1024, 2)
+
+        # Export ONNX
+        try:
+            onnx_model = _build_onnx_mesn_graph(
+                reservoirs, scalers, model, params, SENSOR_SPECS_CSV, f"{MODEL_NAME}_global"
+            )
+            _validate_onnx_mesn(onnx_model, reservoirs, scalers, model, params, SENSOR_SPECS_CSV, val_sessions[:10])
+
+            onnx_path = models_dir / f"{MODEL_NAME}_global.onnx"
+            with open(onnx_path, "wb") as f:
+                f.write(onnx_model.SerializeToString())
+            print(f"  ONNX exporte : {onnx_path}")
+
+            _export_c_array_from_bytes(onnx_path, models_dir, f"{MODEL_NAME}_global")
+
+            # NOTE / ECART VOLONTAIRE : contrairement a train_esn.py (une seule
+            # entree, x_val directement utilisable), le graphe MESN a 6 entrees
+            # nommees par capteur qui attendent des fenetres BRUTES, alors que
+            # x_val est deja resume par les reservoirs (sortie de
+            # extract_mesn_windows). _predict_onnx(onnx_path, x_val) ne peut donc
+            # pas fonctionner tel quel ici : on reconstruit les fenetres brutes
+            # par capteur (meme logique que _validate_onnx_mesn) et on utilise
+            # _predict_onnx_mesn (multi-entrees) a la place.
+            window_ms, _ = _window_ms(None)
+            n_steps_by_sensor = _nominal_sensor_steps(SENSOR_SPECS_CSV, window_ms)
+            windows_by_sensor_val, y_val_onnx, _ = _extract_raw_sensor_windows(
+                val_sessions, params, SENSOR_SPECS_CSV, n_steps_by_sensor
+            )
+            if len(y_val_onnx) != len(y_val) or not np.array_equal(y_val_onnx, y_val):
+                print(
+                    f"  WARNING : desalignement fenetres pour edge_metrics['onnx'] "
+                    f"({len(y_val)} Python vs {len(y_val_onnx)} ONNX) -- metriques ONNX "
+                    f"calculees sur les fenetres reconstruites (y_val_onnx), a interpreter avec prudence."
+                )
+
+            y_pred_onnx = _predict_onnx_mesn(onnx_path, windows_by_sensor_val)
+            edge_metrics["onnx"] = _compute_classification_metrics(y_val_onnx, y_pred_onnx)
+            edge_metrics["onnx"]["model_size_kb"] = round(onnx_path.stat().st_size / 1024, 2)
+
+        except Exception as exc:
+            print(f"  Export ONNX echoue ({type(exc).__name__}: {exc})")
+            traceback.print_exc()
+
+        _save_edge_comparison_metrics(MODEL_NAME, edge_metrics)
+        print(f"  Modele global MESN traite (native + export ONNX si reussi).")
+
+    except Exception as exc:
+        print(f"  Modele global echoue ({type(exc).__name__}: {exc})")
+        traceback.print_exc()
 
 
 # ============================================================================
@@ -763,11 +1499,11 @@ def main():
     if not DATA_RAW.exists():
         return print(f"Raw data non trouve: {DATA_RAW}")
 
-    sessions = load_raw_sessions(DATA_RAW)
+    sessions = load_sessions_from_csv(OUTPUT_PATH_NO_SMOTE_FREQ_NO_SYNC, sensor_specs=SENSOR_SPECS_CSV)
     if not sessions:
         return print("Aucune session raw disponible.")
 
-    params = optimize_hyperparams(sessions) if USE_OPTUNA_MESN else DEFAULT_PARAMS
+    params = optimize_hyperparams(sessions, sensor_specs=SENSOR_SPECS_CSV) if USE_OPTUNA_MESN else DEFAULT_PARAMS
 
     unique_sessions = [(s.participant, s.session) for s in sessions]
     print(f"Sessions chargees: {len(unique_sessions)}")
@@ -787,15 +1523,24 @@ def main():
 
         model = None
         try:
-            scalers = _make_scalers(train_sessions)
-            if set(scalers) != set(SENSOR_SPECS):
-                missing = sorted(set(SENSOR_SPECS) - set(scalers))
+            scalers = _make_scalers(train_sessions, sensor_specs=SENSOR_SPECS_CSV)
+            if set(scalers) != set(SENSOR_SPECS_CSV):
+                missing = sorted(set(SENSOR_SPECS_CSV) - set(scalers))
                 print(f"  WARNING: scalers manquants pour {missing}. Fold ignore.")
                 continue
 
-            reservoirs = _build_reservoirs(params, scalers)
-            x_train, y_train, _ = extract_mesn_windows(train_sessions, reservoirs, scalers, params)
-            x_test, y_test, _ = extract_mesn_windows(test_sessions, reservoirs, scalers, params)
+            reservoirs = _build_reservoirs(params, scalers, sensor_specs=SENSOR_SPECS_CSV)
+            x_train, y_train, _, x_unlabeled, _ = extract_mesn_windows(
+                train_sessions, reservoirs, scalers, params, sensor_specs=SENSOR_SPECS_CSV
+            )
+            x_test, y_test, _, _, _ = extract_mesn_windows(
+                test_sessions, reservoirs, scalers, params, sensor_specs=SENSOR_SPECS_CSV
+            )
+
+            if len(y_train) > 0:
+                x_train_3d = x_train.reshape(x_train.shape[0], 1, x_train.shape[1])
+                x_train_3d, y_train = resample_windows_smote(x_train_3d, y_train)
+                x_train = x_train_3d.reshape(x_train_3d.shape[0], x_train_3d.shape[2])
 
             if len(y_train) == 0 or len(y_test) == 0:
                 print("  WARNING: train/test vide. Fold ignore.")
@@ -804,6 +1549,15 @@ def main():
             print(f"  Train: {len(x_train)} fenetres | Test: {len(x_test)} fenetres")
             model = build_readout(params)
             fit_readout(model, x_train, y_train)
+
+            if len(x_unlabeled) > 0 and x_train.shape[1] == x_unlabeled.shape[1]:
+                proba_wrapper = _ReadoutProbaWrapper(model)
+                x_train_v2, y_train_v2, pseudo_y, _ = add_pseudo_labels(proba_wrapper, x_train, y_train, x_unlabeled)
+                if len(pseudo_y) > 0:
+                    _free_memory(model)
+                    model = build_readout(params)
+                    fit_readout(model, x_train_v2, y_train_v2)
+
             y_pred = predict_readout(model, x_test)
 
             f1_mac = f1_score(y_test, y_pred, average="macro", zero_division=0)

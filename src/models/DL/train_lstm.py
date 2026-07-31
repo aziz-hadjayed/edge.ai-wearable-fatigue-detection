@@ -51,12 +51,13 @@ from config import *
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score
 from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
-from keras.layers import LSTM, Bidirectional, BatchNormalization, Dense, Dropout, Input
-from keras.models import Sequential
-from keras.optimizers import Adam
-from keras.regularizers import l2
-from keras.utils import to_categorical
-from keras.callbacks import EarlyStopping, TerminateOnNaN
+from tensorflow.keras.layers import LSTM, Bidirectional, BatchNormalization, Dense, Dropout, Input
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
+from models.semi_supervised import add_pseudo_labels, extract_all_windows
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -68,18 +69,6 @@ LABEL_MAPPING     = {0: 0, 1: 1, 2: 2, 3: 3}
 TARGET_NAMES      = ["baseline", "activity", "pre_fatigue", "fatigue"]
 N_OPTUNA_SESSIONS = 11       # sessions tirées au hasard pour évaluer chaque trial Optuna
 
-OPTUNA_SPACE = {
-    "n_lstm_layers": {"low": 1, "high": 2},
-    "lstm_units":    [32, 64, 128],
-    "lstm_units_2":  [16, 32, 64],
-    "bidirectional": [False, True],
-    "dense_units":   [32, 64, 128],
-    "dropout_rate":  {"low": 0.2, "high": 0.55},
-    "l2_reg":        {"low": 1e-6, "high": 1e-2, "log": True},
-    "learning_rate": {"low": 5e-5, "high": 5e-3, "log": True},
-    "batch_size":    [16, 32], 
-}
-WINDOW_CONFIGS
 # ══════════════════════════════════════════════════════════════════════
 # 3. MÉMOIRE
 # ══════════════════════════════════════════════════════════════════════
@@ -151,17 +140,15 @@ def _clone_model_for_tflite(model):
         cpu_model.set_weights(model.get_weights())
     return cpu_model
 
-def _save_tflite_int8(model, df_representative, window_size, step_size, models_dir, stem):
+def _save_tflite_int8_windows(model, X_windows, models_dir, stem):
     def representative_dataset():
-        count = 0
-        for _, group in df_representative.groupby([COL_PARTICIPANT, COL_SESSION]):
-            X = group[SIGNAL_COLS].values
-            for start in range(0, len(X) - window_size + 1, step_size):
-                end = start + window_size
-                yield [X[start:end][np.newaxis, ...].astype(np.float32)]
-                count += 1
-                if count >= 200:
-                    return
+        if len(X_windows) == 0:
+            return
+        idx = np.random.default_rng(42).choice(
+            len(X_windows), min(200, len(X_windows)), replace=False
+        )
+        for i in idx:
+            yield [X_windows[i:i + 1].astype(np.float32)]
 
     cpu_model = _clone_model_for_tflite(model)
     converter = tf.lite.TFLiteConverter.from_keras_model(cpu_model)
@@ -177,6 +164,11 @@ def _save_tflite_int8(model, df_representative, window_size, step_size, models_d
     _export_c_array(tflite_bytes, models_dir / f"{stem}_int8.h", stem)
     print(f"  TFLite : {tflite_path.name}  ({len(tflite_bytes)/1024:.1f} KB / {STM32_FLASH_KB} KB)")
     del cpu_model; gc.collect()
+
+
+def _save_tflite_int8(model, df_representative, window_size, step_size, models_dir, stem):
+    X_repr, _ = extract_all_windows(df_representative, window_size, step_size)
+    _save_tflite_int8_windows(model, X_repr, models_dir, stem)
 
 # ══════════════════════════════════════════════════════════════════════
 # 5. VISUALISATION
@@ -329,16 +321,16 @@ def build_model(input_shape, num_classes, params):
     return model
 
 def optuna_objective(trial, df_splits, window_size, step_size, num_classes):
-    n_lstm_layers = trial.suggest_int("n_lstm_layers", **OPTUNA_SPACE["n_lstm_layers"])
-    lstm_units    = trial.suggest_categorical("lstm_units",  OPTUNA_SPACE["lstm_units"])
-    lstm_units_2  = (trial.suggest_categorical("lstm_units_2", OPTUNA_SPACE["lstm_units_2"])
+    n_lstm_layers = trial.suggest_int("n_lstm_layers", **LSTM_OPTUNA_SPACE["n_lstm_layers"])
+    lstm_units    = trial.suggest_categorical("lstm_units",  LSTM_OPTUNA_SPACE["lstm_units"])
+    lstm_units_2  = (trial.suggest_categorical("lstm_units_2", LSTM_OPTUNA_SPACE["lstm_units_2"])
                      if n_lstm_layers > 1 else 32)
-    bidirectional = trial.suggest_categorical("bidirectional", OPTUNA_SPACE["bidirectional"])
-    dense_units   = trial.suggest_categorical("dense_units",   OPTUNA_SPACE["dense_units"])
-    dropout_rate  = trial.suggest_float("dropout_rate",  **OPTUNA_SPACE["dropout_rate"])
-    l2_reg        = trial.suggest_float("l2_reg",        **OPTUNA_SPACE["l2_reg"])
-    learning_rate = trial.suggest_float("learning_rate", **OPTUNA_SPACE["learning_rate"])
-    batch_size    = trial.suggest_categorical("batch_size", OPTUNA_SPACE["batch_size"])
+    bidirectional = trial.suggest_categorical("bidirectional", LSTM_OPTUNA_SPACE["bidirectional"])
+    dense_units   = trial.suggest_categorical("dense_units",   LSTM_OPTUNA_SPACE["dense_units"])
+    dropout_rate  = trial.suggest_float("dropout_rate",  **LSTM_OPTUNA_SPACE["dropout_rate"])
+    l2_reg        = trial.suggest_float("l2_reg",        **LSTM_OPTUNA_SPACE["l2_reg"])
+    learning_rate = trial.suggest_float("learning_rate", **LSTM_OPTUNA_SPACE["learning_rate"])
+    batch_size    = trial.suggest_categorical("batch_size", LSTM_OPTUNA_SPACE["batch_size"])
 
     params = {
         "n_lstm_layers": n_lstm_layers, "lstm_units": lstm_units,
@@ -436,63 +428,86 @@ def optimize_hyperparams(df, num_classes, n_trials=30):
 # ══════════════════════════════════════════════════════════════════════
 # 8. MODÈLE GLOBAL
 # ══════════════════════════════════════════════════════════════════════
-def train_global_model(df, best_params, num_classes, val_sessions):
+def train_global_model(df_labeled, df_unlabeled, best_params, num_classes, val_sessions):
     print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
     config = WINDOW_CONFIGS["default"]
     W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
+    bs = best_params.get("batch_size", 32)
 
-    df_all = df.copy()
+    df_all = df_labeled.copy()
     scaler = RobustScaler()
     df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
-    
-    y_all = get_window_labels(df_all, W_SIZE, S_SIZE)
-    w = compute_class_weight("balanced", classes=np.unique(y_all), y=y_all)
-    weight_dict = dict(enumerate(w))
-    
+    df_unl = df_unlabeled.copy()
+    if len(df_unl) > 0:
+        df_unl[SIGNAL_COLS] = scaler.transform(df_unl[SIGNAL_COLS])
+
     val_sessions_set = set(val_sessions)
     mask_val = df_all.set_index([COL_PARTICIPANT, COL_SESSION]).index.isin(val_sessions_set)
     df_train = df_all[~mask_val].copy()
     df_val = df_all[mask_val].copy()
 
-    bs = best_params.get("batch_size", 32)
-    ds_train, st_train = create_tf_dataset(df_train, W_SIZE, S_SIZE, bs, num_classes)
-    ds_val,   st_val   = create_tf_dataset(df_val,   W_SIZE, S_SIZE, bs, num_classes)
-    
-    print(f"  Modèle global - Classes Weights: {weight_dict}")
+    X_tr, y_tr = extract_all_windows(df_train, W_SIZE, S_SIZE)
+    X_vl, y_vl = extract_all_windows(df_val, W_SIZE, S_SIZE)
+    X_unlabeled, _ = (
+        extract_all_windows(df_unl, W_SIZE, S_SIZE)
+        if len(df_unl) > 0 else (np.array([]), np.array([]))
+    )
+    del df_all, df_unl, df_train, df_val
+    gc.collect()
+    print(f"  Fenêtres train : {len(X_tr)} | val : {len(X_vl)} | unlabeled : {len(X_unlabeled)}")
+
+    w = compute_class_weight("balanced", classes=np.unique(y_tr), y=y_tr)
+    weight_dict = dict(zip(np.unique(y_tr), w))
 
     model = None
     try:
         model = build_model((W_SIZE, len(SIGNAL_COLS)), num_classes, best_params)
-        
-        callbacks = [TerminateOnNaN()]
-        if ds_val is not None:
-            callbacks.insert(0, EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True))
-        else:
-            callbacks.insert(0, EarlyStopping(monitor="loss", patience=15, restore_best_weights=True))
-            
         model.fit(
-            ds_train,
+            X_tr, to_categorical(y_tr, num_classes),
+            validation_data=(X_vl, to_categorical(y_vl, num_classes)),
             epochs=EPOCHS,
-            validation_data=ds_val,
-            steps_per_epoch=st_train,
-            validation_steps=st_val,
-            shuffle=False,
-            callbacks=callbacks,
+            batch_size=bs,
+            callbacks=[
+                EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
+                TerminateOnNaN(),
+            ],
             class_weight=weight_dict,
             verbose=1,
         )
-        
+
+        X_tr_v2, y_tr_v2, pseudo_y, _ = add_pseudo_labels(model, X_tr, y_tr, X_unlabeled)
+        if len(pseudo_y) > 0:
+            w_v2 = compute_class_weight("balanced", classes=np.unique(y_tr_v2), y=y_tr_v2)
+            weight_dict_v2 = dict(zip(np.unique(y_tr_v2), w_v2))
+            _free_memory(model)
+            model = build_model((W_SIZE, len(SIGNAL_COLS)), num_classes, best_params)
+            model.fit(
+                X_tr_v2, to_categorical(y_tr_v2, num_classes),
+                validation_data=(X_vl, to_categorical(y_vl, num_classes)),
+                epochs=EPOCHS,
+                batch_size=bs,
+                callbacks=[
+                    EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True),
+                    TerminateOnNaN(),
+                ],
+                class_weight=weight_dict_v2,
+                verbose=1,
+            )
+            X_repr = np.concatenate([X_tr_v2, X_vl], axis=0)
+        else:
+            X_repr = np.concatenate([X_tr, X_vl], axis=0)
+
         models_dir = MODELS_DIR / "LSTM"
         models_dir.mkdir(parents=True, exist_ok=True)
-        _save_tflite_int8(model, df_train, W_SIZE, S_SIZE, models_dir, f"{MODEL_NAME}_global")
-        print(f"  ✅ Modèle global sauvegardé.")
+        _save_tflite_int8_windows(model, X_repr, models_dir, f"{MODEL_NAME}_global")
+        print(f"  Modèle global exporté (.tflite + .h).")
     except Exception as exc:
-        print(f"  ❌ Modèle global échoué ({type(exc).__name__}: {exc})")
+        print(f"  Modèle global échoué ({type(exc).__name__}: {exc})")
     finally:
         _free_memory(model)
-        if 'ds_train' in locals(): del ds_train
-        if 'ds_val' in locals(): del ds_val
-        del df_all, df_train, df_val
+        for name in ("X_tr", "X_vl", "X_unlabeled", "X_repr"):
+            if name in locals():
+                del locals()[name]
         gc.collect()
 
 # ══════════════════════════════════════════════════════════════════════
@@ -546,6 +561,16 @@ def main():
         df_fit[SIGNAL_COLS]  = scaler.fit_transform(df_fit[SIGNAL_COLS])
         df_val[SIGNAL_COLS]  = scaler.transform(df_val[SIGNAL_COLS])
         df_test[SIGNAL_COLS] = scaler.transform(df_test[SIGNAL_COLS])
+        df_unlabeled_fit = df_unlabeled.copy()
+        if len(df_unlabeled_fit) > 0:
+            df_unlabeled_fit[SIGNAL_COLS] = scaler.transform(df_unlabeled_fit[SIGNAL_COLS])
+
+        X_fit, y_fit = extract_all_windows(df_fit, W_SIZE, S_SIZE)
+        X_val_np, y_val_np = extract_all_windows(df_val, W_SIZE, S_SIZE)
+        X_unlabeled, _ = (
+            extract_all_windows(df_unlabeled_fit, W_SIZE, S_SIZE)
+            if len(df_unlabeled_fit) > 0 else (np.array([]), np.array([]))
+        )
 
         bs = best_params.get("batch_size", 32)
 
@@ -581,6 +606,25 @@ def main():
                 class_weight=weight_dict,
                 verbose=1,
             )
+
+            X_fit_v2, y_fit_v2, pseudo_y, _ = add_pseudo_labels(model, X_fit, y_fit, X_unlabeled)
+            if len(pseudo_y) > 0:
+                w_v2 = compute_class_weight("balanced", classes=np.unique(y_fit_v2), y=y_fit_v2)
+                weight_dict_v2 = dict(zip(np.unique(y_fit_v2), w_v2))
+                _free_memory(model)
+                model = build_model((W_SIZE, len(SIGNAL_COLS)), num_classes, best_params)
+                history = model.fit(
+                    X_fit_v2, to_categorical(y_fit_v2, num_classes),
+                    epochs=EPOCHS,
+                    validation_data=(X_val_np, to_categorical(y_val_np, num_classes)),
+                    batch_size=bs,
+                    callbacks=[
+                        EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True),
+                        TerminateOnNaN(),
+                    ],
+                    class_weight=weight_dict_v2,
+                    verbose=1,
+                )
 
             y_pred  = np.argmax(model.predict(ds_test, steps=st_test, verbose=0), axis=1)
             y_true  = get_window_labels(df_test, W_SIZE, S_SIZE)
@@ -642,7 +686,7 @@ def main():
         json.dump(curr_metrics, f, indent=4)
     print(f"\n📊 Métriques → {METRICS_PATH}")
 
-    train_global_model(df, best_params, num_classes, val_sessions)
+    train_global_model(df_labeled, df_unlabeled, best_params, num_classes, val_sessions)
 
 
 if __name__ == "__main__":

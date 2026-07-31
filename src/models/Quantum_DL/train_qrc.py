@@ -6,13 +6,18 @@ import warnings
 from pathlib import Path
 from typing import cast
 
+# pyrefly: ignore [missing-import]
 import joblib
+# pyrefly: ignore [missing-import]
 import matplotlib
 matplotlib.use("Agg")
+# pyrefly: ignore [missing-import]
 import matplotlib.pyplot as plt
+# pyrefly: ignore [missing-import]
 import numpy as np
 import optuna
 import pandas as pd
+# pyrefly: ignore [missing-import]
 from reservoirpy.nodes import Ridge
 
 
@@ -490,51 +495,12 @@ def plot_fold(fold_idx, test_part, test_sess, save_dir, f1_mac, bal_acc, y_true,
 # ============================================================================
 # 6. MODELE GLOBAL
 # ============================================================================
-def train_global_model(df, best_params):
+def train_global_model(df_labeled, df_unlabeled, best_params):
     print("\n" + "=" * 60 + f"\nMODELE GLOBAL - {MODEL_NAME}\n" + "=" * 60)
-    config = _qrc_window_config()
-    window_size = config["window_size"]
-    step_size = config["step_size"]
-
-    df_all = df.copy()
-    scaler = RobustScaler()
-    df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
-
-    reservoir = _build_qrc(best_params, len(SIGNAL_COLS))
-    x_all, y_all = extract_qrc_windows(
-        df_all,
-        reservoir,
-        window_size,
-        step_size,
-        tag="global",
-        verbose=True,
+    print(
+        f"  ⚠ {MODEL_NAME} : pas d'export STM32 (.tflite/.h). "
+        f"Métriques LOSO conservées ({len(df_labeled)} labellisées, {len(df_unlabeled)} unlabeled)."
     )
-    if len(y_all) == 0:
-        print("  Aucun exemple global disponible.")
-        return
-
-    model = build_model(best_params)
-    fit_readout(model, x_all, y_all)
-
-    models_dir = MODELS_DIR / MODEL_NAME
-    models_dir.mkdir(parents=True, exist_ok=True)
-    model_path = models_dir / f"{MODEL_NAME}_global.pkl"
-    joblib.dump(
-        {
-            "model_name": MODEL_NAME,
-            "readout": model,
-            "reservoir": reservoir,
-            "scaler": scaler,
-            "signal_cols": SIGNAL_COLS,
-            "label_mapping": LABEL_MAPPING,
-            "target_names": TARGET_NAMES,
-            "window_size": window_size,
-            "step_size": step_size,
-            "params": best_params,
-        },
-        model_path,
-    )
-    print(f"  Modele global sauvegarde: {model_path}")
 
 
 # ============================================================================
@@ -546,16 +512,19 @@ def main():
         return print(f"Dataset non trouve: {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
+    df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
+    df_labeled = df[df[COL_LABEL] >= 0].copy()
+    df_unlabeled = df[df[COL_LABEL] == -1].copy()
+    print(f"Labeled: {len(df_labeled)} lignes | Unlabeled: {len(df_unlabeled)} lignes")
 
     unique_sessions = [
         tuple(x)
-        for x in df[df[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]]
+        for x in df_labeled[df_labeled[COL_PARTICIPANT] >= 1][[COL_PARTICIPANT, COL_SESSION]]
         .drop_duplicates()
         .values
     ]
 
-    best_params = optimize_hyperparams(df) if USE_OPTUNA_QRC else MODEL_PARAMS["QRC"]
+    best_params = optimize_hyperparams(df_labeled) if USE_OPTUNA_QRC else MODEL_PARAMS["QRC"]
     best_params = {**MODEL_PARAMS["QRC"], **best_params}
 
     all_metrics = []
@@ -568,8 +537,8 @@ def main():
         window_size = config["window_size"]
         step_size = config["step_size"]
 
-        df_train = df[~((df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess))].copy()
-        df_test = df[(df[COL_PARTICIPANT] == test_part) & (df[COL_SESSION] == test_sess)].copy()
+        df_train = df_labeled[~((df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess))].copy()
+        df_test = df_labeled[(df_labeled[COL_PARTICIPANT] == test_part) & (df_labeled[COL_SESSION] == test_sess)].copy()
 
         model = None
         try:
@@ -677,7 +646,7 @@ def main():
         json.dump(curr_metrics, f, indent=4)
     print(f"\nMetriques -> {METRICS_PATH}")
 
-    train_global_model(df, best_params)
+    train_global_model(df_labeled, df_unlabeled, best_params)
 
 
 if __name__ == "__main__":

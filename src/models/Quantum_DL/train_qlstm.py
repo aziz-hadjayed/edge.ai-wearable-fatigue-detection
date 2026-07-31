@@ -623,11 +623,10 @@ def train_global_model(df, best_params, num_classes, val_sessions):
             shuffle=False, callbacks=callbacks,
             class_weight=dict(enumerate(w)), verbose=1,
         )
-        models_dir = MODELS_DIR / "QLSTM"
-        models_dir.mkdir(parents=True, exist_ok=True)
-        model_path = models_dir / "QLSTM_global.keras"
-        model.save(model_path)
-        print(f"  Modèle global sauvegardé : {model_path}")
+        print(
+            f"  ⚠ {MODEL_NAME} : export global STM32 (.tflite/.h) non implémenté pour QLSTM. "
+            "Utilisez CNN-1D, TCN, LSTM ou Distillation Student pour l'embarqué."
+        )
     except Exception as exc:
         print(f"  Modèle global échoué ({type(exc).__name__}: {exc})")
     finally:

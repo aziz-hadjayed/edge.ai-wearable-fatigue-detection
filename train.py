@@ -14,15 +14,15 @@ def train_all_models():
     root_dir = Path(__file__).resolve().parent
     models_dir = root_dir / "src" / "models"
     
-    # Trouver tous les scripts train_*.py
-    scripts = sorted(glob(str(models_dir / "train_*.py")))
+    # Trouver tous les scripts train_*.py récursivement
+    scripts = sorted(glob(str(models_dir / "**" / "train_*.py"), recursive=True))
     
     if not scripts:
-        print("❌ Aucun script de training trouvé dans src/models/")
+        print(" Aucun script de training trouvé dans src/models/")
         return
 
     print("=" * 60)
-    print(f"🚀 Démarrage du training global ({len(scripts)} scripts détectés)")
+    print(f" Démarrage du training global ({len(scripts)} scripts détectés)")
     print("=" * 60)
 
     results = []
@@ -32,10 +32,10 @@ def train_all_models():
         
         # Ignorer les fichiers vides (comme train_tcn.py)
         if os.path.getsize(script_path) == 0:
-            print(f"⚠️  Skip {script_name} (fichier vide)")
+            print(f"  Skip {script_name} (fichier vide)")
             continue
 
-        print(f"\n▶️  ENTRAÎNEMENT : {script_name}")
+        print(f"\n  ENTRAÎNEMENT : {script_name}")
         print("-" * 40)
         
         start_time = time.time()
@@ -49,22 +49,22 @@ def train_all_models():
                 check=True
             )
             elapsed = time.time() - start_time
-            print(f"\n✅ Terminé : {script_name} ({elapsed/60:.1f} min)")
+            print(f"\n Terminé : {script_name} ({elapsed/60:.1f} min)")
             results.append((script_name, "SUCCESS", elapsed))
         except subprocess.CalledProcessError:
             elapsed = time.time() - start_time
-            print(f"\n❌ Erreur lors de l'exécution de {script_name}")
+            print(f"\n Erreur lors de l'exécution de {script_name}")
             results.append((script_name, "FAILED", elapsed))
         except KeyboardInterrupt:
-            print("\n🛑 Interruption par l'utilisateur. Arrêt du training global.")
+            print("\n Interruption par l'utilisateur. Arrêt du training global.")
             break
         except Exception as e:
             elapsed = time.time() - start_time
-            print(f"\n❌ Erreur inattendue pour {script_name} : {e}")
+            print(f"\n Erreur inattendue pour {script_name} : {e}")
             results.append((script_name, "ERROR", elapsed))
 
     print("\n" + "=" * 60)
-    print("📊 RÉSUMÉ DU TRAINING GLOBAL")
+    print(" RÉSUMÉ DU TRAINING GLOBAL")
     print("=" * 60)
     if not results:
         print("Aucun script n'a été exécuté.")

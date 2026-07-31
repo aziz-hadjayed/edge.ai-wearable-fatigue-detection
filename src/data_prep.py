@@ -358,7 +358,191 @@ def data_clean_1(path):
         print("\n Toujours aucune donnée (vérifier timestamps)")
 
 
+
 # ==============================================================================
+# Variante SANS synchronisation de frequence (format B : union exacte des
+# timestamps, NaN reels la ou un capteur n'a pas de mesure a cet instant)
+# ==============================================================================
+
+def load_rename_no_sync(filenames, col_map, t_ref):
+    """
+    Identique a load_rename_resample mais SANS resample_to_target_freq :
+    conserve les timestamps natifs du capteur (pas d'interpolation/ffill de sync).
+    """
+    all_dfs = []
+    for filepath in filenames:
+        df_part = pd.read_csv(filepath)
+        df_part.columns = df_part.columns.str.strip().str.lower()
+        all_dfs.append(df_part)
+
+    df = pd.concat(all_dfs)
+    ts_col = [c for c in df.columns if "time" in c][0]
+    df = df.rename(columns={ts_col: "timestamp"})
+
+    cols = {"timestamp": "timestamp"}
+    for k, v in col_map.items():
+        if k in df.columns:
+            cols[k] = v
+
+    df = df[list(cols.keys())].rename(columns=cols)
+    df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce") - t_ref
+    df = df.dropna(subset=["timestamp"]).sort_values("timestamp").drop_duplicates(subset=["timestamp"])
+    return df.reset_index(drop=True)
+
+
+def compute_breathing_rpm_no_sync(path, t_ref):
+    """
+    Identique a compute_breathing_rpm mais SANS le resample_to_target_freq final :
+    garde un point RPM par pic detecte, a son timestamp natif.
+    """
+    df = pd.read_csv(path)
+    df.columns = df.columns.str.strip()
+
+    ts = df["timestamp"].values
+    sig = df["breathing_waveform"].values
+    sig = sig - np.mean(sig)
+    b, a = butter(2, [FMIN, FMAX], btype="bandpass", fs=FS_BREATHING)
+    sig = filtfilt(b, a, sig)
+
+    peaks, props = find_peaks(
+        sig, distance=int(MIN_DIST_S * FS_BREATHING), prominence=PROM_MIN
+    )
+
+    rows = []
+    for i in range(len(peaks) - 1):
+        dt = (peaks[i + 1] - peaks[i]) / FS_BREATHING
+        rpm = 60 / dt
+        rows.append(
+            {
+                "timestamp": ts[peaks[i]] - t_ref,
+                "breathing_rpm": rpm,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def merge_sensors_outer(sensor_dfs):
+    """
+    Fusionne les DataFrames capteurs par UNION EXACTE des timestamps (merge outer).
+    Contrairement a merge_asof (tolerance + nearest), aucune valeur n'est
+    dupliquee/rapprochee : chaque capteur garde ses propres lignes, les autres
+    colonnes restent NaN a cet instant si ce capteur n'a pas mesure a ce moment.
+    """
+    merged = None
+    for df in sensor_dfs:
+        if df is None or df.empty:
+            continue
+        merged = df if merged is None else pd.merge(merged, df, on="timestamp", how="outer")
+    if merged is not None:
+        merged = merged.sort_values("timestamp").reset_index(drop=True)
+    return merged
+
+
+def data_clean_1_no_sync(path):
+    """
+    Variante de data_clean_1 SANS synchronisation de frequence :
+      - Meme extraction des intervalles de label et de t0
+      - Chaque capteur garde ses timestamps natifs (pas de resample_to_target_freq)
+      - Fusion par union exacte des timestamps (merge outer), pas merge_asof
+      - Meme attribution des labels (assign_labels, inchangee)
+    Retourne un DataFrame avec les memes colonnes que data_clean_1, mais avec
+    des NaN reels la ou un capteur n'avait pas de mesure a ce timestamp precis
+    (au lieu d'une valeur interpolee/dupliquee par la synchronisation 4Hz).
+    """
+    all_data = []
+
+    for p_dir in path.iterdir():
+        if not p_dir.is_dir():
+            continue
+        for s_dir in p_dir.iterdir():
+            if not s_dir.is_dir():
+                continue
+
+            print(f"\n {p_dir.name} | {s_dir.name} (no_sync)")
+
+            intervals, t0 = get_label_intervals(s_dir / PATH_MARKERS)
+            if not intervals or t0 is None:
+                continue
+
+            sensor_dfs = []
+            for f, cmap in FILE_COLS.items():
+                base_name = f.replace(".csv", "")
+                shards = list(s_dir.glob(f"{base_name}*.csv"))
+                if not shards:
+                    continue
+                df_sensor = load_rename_no_sync(shards, cmap, t0)
+                if df_sensor is not None and not df_sensor.empty:
+                    sensor_dfs.append(df_sensor)
+
+            b_path = s_dir / PATH_BREATHING
+            if b_path.exists():
+                df_b = compute_breathing_rpm_no_sync(b_path, t0)
+                if df_b is not None and not df_b.empty:
+                    sensor_dfs.append(df_b[["timestamp", "breathing_rpm"]])
+
+            merged = merge_sensors_outer(sensor_dfs)
+            if merged is None or merged.empty:
+                print("  vide, session ignoree")
+                continue
+
+            print(
+                "timestamp range:",
+                merged["timestamp"].min(),
+                merged["timestamp"].max(),
+                f"| {len(merged)} lignes (union timestamps)",
+            )
+
+            merged = assign_labels(merged, intervals)
+            if merged.empty:
+                print("  toujours vide apres assign_labels")
+                continue
+
+            merged[COL_PARTICIPANT] = p_dir.name
+            merged[COL_SESSION] = s_dir.name
+            all_data.append(merged)
+
+    if all_data:
+        return pd.concat(all_data, ignore_index=True)
+    else:
+        print("\n Aucune donnee (no_sync).")
+        return None
+
+
+def clean_data_2_no_sync(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Variante de clean_data_2 pour le pipeline SANS synchronisation de frequence.
+    Ne fait PAS de ffill/bfill par groupe : cette propagation dupliquerait les
+    valeurs d'un capteur lent (ex: ibi) sur toutes les lignes generees par les
+    capteurs plus rapides entre deux vraies mesures — recreant artificiellement
+    le meme probleme que la synchronisation de frequence qu'on cherche a eviter.
+    Les NaN reels (capteur absent a ce timestamp precis) sont conserves tels quels.
+    """
+    print("\n" + "=" * 60)
+    print("ÉTAPE 1 : NETTOYAGE (clean_data_2_no_sync, sans ffill/bfill)")
+    print("=" * 60)
+
+    df = df.copy()
+
+    if "breathing_q" in df.columns:
+        df = df.drop(columns=["breathing_q"])
+        print("✔ breathing_q supprimé")
+
+    nan_total = df[SIGNAL_COLS].isna().sum().sum() if all(c in df.columns for c in SIGNAL_COLS) else None
+    print(f"ℹ NaN conservés tels quels (frequences non synchronisées) : {nan_total}")
+
+    if "eda" in df.columns:
+        skew_before = df["eda"].skew()
+        df["eda"] = np.log1p(df["eda"])
+        print(f"✔ EDA log1p | asymétrie : {skew_before:.3f} → {df['eda'].skew():.3f}")
+
+    df = df.sort_values(
+        by=[COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP], ascending=[True, True, True]
+    ).reset_index(drop=True)
+    print(f"✔ Trié par participant → session → timestamp")
+
+    print(f"\n✔ clean_data_2_no_sync terminé | Shape : {df.shape}")
+    return df# ==============================================================================
 # Fusion des données démographiques (age, gender) depuis metadata.csv
 # ==============================================================================
 
@@ -482,17 +666,17 @@ def merge_demographics(df: pd.DataFrame, metadata_path=None) -> pd.DataFrame:
 # ==============================================================================
 
 
-def visualize_data(df):
+def visualize_data(df, num_cols=None):
     """
     Affiche un résumé statistique et descriptif complet du dataset :
     types, valeurs manquantes, doublons, distribution des labels,
     statistiques par session/participant, continuité temporelle et corrélations.
+
+    num_cols : liste des colonnes numeriques a analyser (defaut : NUM_COLS de config.py).
+               Utile pour le mode no_sync ou breathing_q n'existe pas.
     """
-    """
-    Affiche un résumé statistique et descriptif complet du dataset :
-    types, valeurs manquantes, doublons, distribution des labels,
-    statistiques par session/participant, continuité temporelle et corrélations.
-    """
+    if num_cols is None:
+        num_cols = NUM_COLS
 
     # ==============================================================================
     # Noms réels des colonnes
@@ -544,14 +728,9 @@ def visualize_data(df):
     print(f"Lignes entièrement dupliquées : {n_duplicates}")
     print(f"Pourcentage                   : {n_duplicates / len(df) * 100:.2f}%")
 
-    # Doublons sur timestamp uniquement
     n_dup_ts = df.duplicated(subset=[COL_TIMESTAMP]).sum()
     print(f"\nTimestamps dupliqués          : {n_dup_ts}")
     print(f"Pourcentage                   : {n_dup_ts / len(df) * 100:.2f}%")
-
-    # ==============================================================================
-    # Investiguer les timestamps dupliqués
-    # ==============================================================================
 
     print(f"\n--- Analyse des timestamps dupliqués ---")
     dup_ts = df[df.duplicated(subset=[COL_TIMESTAMP], keep=False)]
@@ -566,7 +745,6 @@ def visualize_data(df):
         .to_string()
     )
 
-    # Doublons par participant/session
     print(f"\nDoublons par participant/session :")
     dup_by_group = (
         df.groupby([COL_PARTICIPANT, COL_SESSION])
@@ -580,10 +758,10 @@ def visualize_data(df):
     print("\n" + "=" * 70)
     print("6. STATISTIQUES DESCRIPTIVES")
     print("=" * 70)
-    stats = df[NUM_COLS].describe().T
-    stats["median"] = df[NUM_COLS].median()
-    stats["skewness"] = df[NUM_COLS].skew()
-    stats["kurtosis"] = df[NUM_COLS].kurt()
+    stats = df[num_cols].describe().T
+    stats["median"] = df[num_cols].median()
+    stats["skewness"] = df[num_cols].skew()
+    stats["kurtosis"] = df[num_cols].kurt()
     print(
         stats[
             [
@@ -650,7 +828,7 @@ def visualize_data(df):
     for (pid, sid), group in df.groupby([COL_PARTICIPANT, COL_SESSION]):
         group = group.sort_values(COL_TIMESTAMP)
         diffs = group[COL_TIMESTAMP].diff().dropna()
-        diffs = diffs[diffs > 0]  # ignorer les timestamps identiques
+        diffs = diffs[diffs > 0]
 
         expected_interval = TARGET_PERIOD
         anomalies = diffs[diffs > expected_interval * 2]
@@ -668,7 +846,7 @@ def visualize_data(df):
     print("=" * 70)
     print(f"{'Colonne':<20} {'Outliers':<10} {'%':<8} {'Min':<12} {'Max':<12}")
     print("-" * 65)
-    for col in NUM_COLS:
+    for col in num_cols:
         Q1 = df[col].quantile(0.25)
         Q3 = df[col].quantile(0.75)
         IQR = Q3 - Q1
@@ -684,7 +862,7 @@ def visualize_data(df):
     print("\n" + "=" * 70)
     print("12. CORRÉLATIONS ENTRE SIGNAUX")
     print("=" * 70)
-    corr_matrix = df[NUM_COLS].corr().round(3)
+    corr_matrix = df[num_cols].corr().round(3)
     print(corr_matrix.to_string())
 
     print("\n" + "=" * 70)
@@ -693,10 +871,10 @@ def visualize_data(df):
     for lbl in df[COL_LABEL].unique():
         if lbl is None or (isinstance(lbl, float) and pd.isna(lbl)):
             print(f"\n--- Label : NaN (unlabeled - zone entre baseline et activity) ---")
-            subset = df[df[COL_LABEL].isna()][NUM_COLS]
+            subset = df[df[COL_LABEL].isna()][num_cols]
         else:
             print(f"\n--- Label : {str(lbl).upper()} ---")
-            subset = df[df[COL_LABEL] == lbl][NUM_COLS]
+            subset = df[df[COL_LABEL] == lbl][num_cols]
         print(subset.describe().T[["mean", "std", "min", "max"]].round(3).to_string())
 
     print("\n" + "=" * 70)
@@ -714,7 +892,7 @@ def visualize_data(df):
     print(f"✔ Lignes totales           : {len(df)}")
     print(f"✔ Participants             : {df[COL_PARTICIPANT].nunique()}")
     print(f"✔ Sessions par participant : {df[COL_SESSION].nunique()}")
-    print(f"✔ Colonnes signaux         : {len(NUM_COLS)}")
+    print(f"✔ Colonnes signaux         : {len(num_cols)}")
     print(
         f"{'✔' if n_duplicates == 0 else '✗'} Doublons                  : {n_duplicates}"
     )
@@ -727,7 +905,6 @@ def visualize_data(df):
     print(
         f"{'✔' if label_pct.max() - label_pct.min() < 10 else '⚠'} Équilibre des classes     : {label_df['Pourcentage'].to_dict()}"
     )
-
 
 # ──  Supprime breathing_q ,ffill/bfill par groupe  pour traite les NaN de ( ibi, temp, wrist_hr, eda) puis median ,   et Log transform EDA  log(1+x) (réduire asymétrie ) ,─────────────────────────────────────────
 def clean_data_2(df: pd.DataFrame) -> pd.DataFrame:

@@ -13,15 +13,18 @@ MODELS_DIR = BASE_DIR / "models_saved"
 DATA_RAW = RAW_DIR
 DATA_PROCESSED = PROCESSED_DIR / "dataset_ref.csv"
 METADATA_PATH = RAW_DIR / "metadata.csv"
-DATA_MODEL_READY = DATA_DIR / "used" / "dataset.csv"
 OUTPUT_PATH_NO_SMOTE = PROCESSED_DIR / "dataset_no_smote.csv"
+OUTPUT_PATH_NO_SMOTE_FREQ_NO_SYNC = PROCESSED_DIR / "dataset_no_smote_freq_no_sync.csv"
 OUTPUT_PATH_SMOTE = PROCESSED_DIR / "dataset_smote.csv"
 METRICS_PATH = BASE_DIR / "metrics.json"
+# DATA_MODEL_READY = DATA_DIR / "used" / "dataset.csv"
+DATA_MODEL_READY = OUTPUT_PATH_NO_SMOTE
 
 OPTUNA = BASE_DIR / "optuna"
 OPTUNA_PATH_CNN_D1 = OPTUNA / "optuna_cnn_results.json"
 OPTUNA_PATH_LSTM = OPTUNA / "optuna_lstm_results.json"
 OPTUNA_PATH_LGBM = OPTUNA / "optuna_lgbm_results.json"
+OPTUNA_PATH_XGB = OPTUNA / "optuna_xgb_results.json"
 OPTUNA_PATH_CNN_TCN = OPTUNA / "optuna_cnn_tcn_results.json"
 OPTUNA_PATH_TCN = OPTUNA / "optuna_tcn_results.json"
 OPTUNA_PATH_CNN_LSTM = OPTUNA / "optuna_cnn_lstm_results.json"
@@ -30,6 +33,8 @@ OPTUNA_PATH_ESN_RLS = OPTUNA / "optuna_esn_rls_results.json"
 OPTUNA_PATH_MESN = OPTUNA / "optuna_mesn_results.json"
 OPTUNA_PATH_QRC = OPTUNA / "optuna_qrc_results.json"
 OPTUNA_PATH_QLSTM = OPTUNA / "optuna_qlstm_results.json"
+OPTUNA_PATH_DISTILL_STUDENT = OPTUNA / "optuna_distill_student_results.json"
+OPTUNA_PATH_DISTILL_TEACHER = OPTUNA / "optuna_distill_teacher_results.json"
 
 # ══════════════════════════════════════════════════════════════════════
 # 2. COLONNES DU DATASET PRINCIPAL (fusionné & étiqueté)
@@ -46,8 +51,9 @@ SENSOR_FREQ = {
     "wrist_acc.csv": 32,
     "wrist_hr.csv": 1,
     "wrist_skin_temperature.csv": 4,
-    "ambient_grandeur.csv": 100,
+    "ambient_grandeur.csv": 4,
     "wrist_ibi.csv": 0.65,
+
     # "features_ppg_ear_right.csv":   100,
     # "ear_gyro_right.csv":         114.86,
 }
@@ -56,10 +62,11 @@ SIGNAL_COLS = [
     "acc_x",
     "acc_y",
     "acc_z",
-    "eda",
     "wrist_hr",
     "ibi",
     "temp",
+    "temp_amb",
+    "hum_amb",
     "breathing_rpm",
     "age",
     "gender",
@@ -83,10 +90,10 @@ SIGNAL_COLS = [
 
 FILE_COLS = {
     "wrist_acc.csv": {"ax": "acc_x", "ay": "acc_y", "az": "acc_z"},
-    "wrist_eda.csv": {"eda": "eda"},
     "wrist_hr.csv": {"hr": "wrist_hr"},
     "wrist_ibi.csv": {"duration": "ibi"},
     "wrist_skin_temperature.csv": {"temp": "temp"},
+    "ambient_grandeur.csv":{"temperature_amb":"temp_amb" , "humidite_amb":"hum_amb"},
 }
 
 NUM_COLS = SIGNAL_COLS.copy()
@@ -102,34 +109,170 @@ STM32_RAM_KB = 1433  # STM32H7A3ZIT6Q
 # ══════════════════════════════════════════════════════════════════════
 # 5. OPTUNA — FLAGS & CHEMINS DE RÉSULTATS
 # ══════════════════════════════════════════════════════════════════════
-USE_OPTUNA_CNN_1D = False
-USE_OPTUNA_LSTM = False
-USE_OPTUNA_LGBM = True
-USE_OPTUNA_CNN_TCN = False
-USE_OPTUNA_TCN = False
+USE_OPTUNA_CNN_1D = True
+USE_OPTUNA_LSTM = True
+USE_OPTUNA_CNN_TCN = True
+USE_OPTUNA_TCN = True
 USE_OPTUNA_CNN_LSTM = True
+
+USE_OPTUNA_LGBM = True
+USE_OPTUNA_XGB = True
+
+USE_OPTUNA_QRC = True
+USE_OPTUNA_QLSTM = True
+
 USE_OPTUNA_ESN = True
 USE_OPTUNA_ESN_RLS = True
 USE_OPTUNA_MESN = True
-USE_OPTUNA_QRC = True
-USE_OPTUNA_QLSTM = False
+
+USE_OPTUNA_DISTILL_STUDENT = True
+USE_OPTUNA_DISTILL_TEACHER = True
+# ══════════════════════════════════════════════════════════════════════
+CNN_D1_OPTUNA_TRIALS = 70
+CNN_D1_OPTUNA_SESSIONS = 30       
+
+CNN_D1_TCN_OPTUNA_TRIALS = 25
+CNN_D1_TCN_OPTUNA_SESSIONS = 36
 
 
-ESN_OPTUNA_TRIALS = 70
-ESN_OPTUNA_SESSIONS = 36
-ESN_RLS_OPTUNA_TRIALS = 150
-ESN_RLS_OPTUNA_SESSIONS = 36
-MESN_OPTUNA_TRIALS = 20
-MESN_OPTUNA_SESSIONS = 12
+
+
 QRC_OPTUNA_TRIALS = 70
 QRC_OPTUNA_SESSIONS = 12
+
 QLSTM_OPTUNA_TRIALS = 20
 QLSTM_OPTUNA_SESSIONS = 5
 
 
+
+ESN_OPTUNA_TRIALS = 70
+ESN_OPTUNA_SESSIONS = 30
+
+ESN_RLS_OPTUNA_TRIALS = 150
+ESN_RLS_OPTUNA_SESSIONS = 30
+
+MESN_OPTUNA_TRIALS = 70
+MESN_OPTUNA_SESSIONS = 30
+
+
+
+TEACHER_OPTUNA_TRIALS = 40
+TEACHER_OPTUNA_SESSIONS = 20
 # ══════════════════════════════════════════════════════════════════════
 # 6. OPTUNA — ESPACES DE RECHERCHE
 # ══════════════════════════════════════════════════════════════════════
+
+LGBM_GPU_PARAMS = {
+    "device": "gpu",
+    "gpu_platform_id": 0,
+    "gpu_device_id": 0,
+    "max_bin": 63,  # Requis pour GPU , maximum 255
+}
+
+
+#------------------------------------------------------------------------>>
+LSTM_OPTUNA_SPACE = {
+    "n_lstm_layers": {"low": 1, "high": 2},
+    "lstm_units":    [32, 64, 128],
+    "lstm_units_2":  [16, 32, 64],
+    "bidirectional": [False, True],
+    "dense_units":   [32, 64, 128],
+    "dropout_rate":  {"low": 0.2, "high": 0.55},
+    "l2_reg":        {"low": 1e-6, "high": 1e-2, "log": True},
+    "learning_rate": {"low": 5e-5, "high": 5e-3, "log": True},
+    "batch_size":    [16, 32], 
+}
+
+CNN_D1_OPTUNA_SPACE = {
+    "n_conv_blocks": [1, 2, 3, 4],
+    "kernel_size":   [3, 5],
+    "filters":       [16,32, 64, 128],
+    "use_batchnorm": [True, False],
+    "activation":    ["relu", "leaky_relu"],
+    "pool_size":     [2, 3],
+    "global_pooling":["flatten", "avg", "max"],
+    "l2_reg":        (1e-5, 1e-2),
+    "optimizer":     ["adam", "rmsprop"],
+    "dense_units":   [64, 128, 256],
+    "dropout_rate":  (0.2, 0.6),
+    "learning_rate": (1e-4, 1e-3),
+    "batch_size":    [32, 64, 128],
+}
+
+CNN_TCN_OPTUNA_SPACE = {
+    "cnn_filters":   [32, 64, 128],
+    "cnn_kernel":    [3, 5],
+    "n_tcn_blocks":  [2, 3, 4],
+    "tcn_filters":   [32, 64, 128],
+    "tcn_kernel":    [3, 5],
+    "activation":    ["relu", "leaky_relu"],
+    "l2_reg":        (1e-5, 1e-2),
+    "optimizer":     ["adam", "rmsprop"],
+    "dense_units":   [32, 64],
+    "dropout_rate":  (0.2, 0.5),
+    "learning_rate": (1e-4, 1e-3),
+    "batch_size":    [32, 64, 128],
+}
+
+CNN_LSTM_OPTUNA_SPACE = {
+    "cnn_filters":    [32, 64, 128],
+    "cnn_kernel":     [3, 5],
+    "n_conv_blocks":  [1, 2, 3],
+    "pool_size":      [2, 3],
+    "lstm_units":     [32, 64, 128],
+    "bidirectional":  [True, False],
+    "activation":     ["relu", "leaky_relu"],
+    "l2_reg":         (1e-5, 1e-2),
+    "optimizer":      ["adam", "rmsprop"],
+    "dense_units":    [32, 64, 128],
+    "dropout_rate":   (0.2, 0.5),
+    "learning_rate":  (1e-4, 1e-3),
+    "batch_size":     [32, 64],
+}
+
+TCN_OPTUNA_SPACE = {
+    "n_tcn_blocks":  [2, 3, 4,5],
+    "tcn_filters":   [32, 64,128],
+    "tcn_kernel":    [3, 5,7],
+    "activation":    ["relu", "leaky_relu"],
+    "l2_reg":        (1e-5, 1e-2),
+    "optimizer":     ["adam", "rmsprop"],
+    "dense_units":   [32, 64,128],
+    "dropout_rate":  (0.2, 0.5),
+    "learning_rate": (1e-4, 1e-3),
+    "batch_size":    [32, 64, 128],
+}
+
+#---------------------------------------------------------------------------------------------------------------------------- ML
+
+LGBM_OPTUNA_SPACE = {
+    "n_estimators":      (100, 1000),
+    "learning_rate":     (1e-3, 0.3),
+    "num_leaves":        (15, 127),
+    "max_depth":         [-1, 6, 10, 15],
+    "min_child_samples": (5, 50),
+    "subsample":         (0.5, 1.0),
+    "colsample_bytree":  (0.5, 1.0),
+    "reg_alpha":         (1e-4, 10.0),
+    "reg_lambda":        (1e-4, 10.0),
+    **LGBM_GPU_PARAMS,
+}
+
+
+XGB_OPTUNA_SPACE = {
+    "n_estimators":      (50, 500),
+    "learning_rate":     (0.01, 0.3),
+    "max_depth":         (3, 12),
+    "min_child_weight":  (1, 10),
+    "subsample":         (0.6, 1.0),
+    "colsample_bytree":  (0.6, 1.0),
+    "reg_alpha":         (1e-8, 10.0),
+    "reg_lambda":        (1e-8, 10.0),
+    "gamma":             (0.0, 5.0),
+}
+
+
+#---------------------------------------------------------------------------------------------------------------------------- Quantum
 
 QLSTM_OPTUNA_SPACE = {
     "n_qubits": [2, 4],  # qubits par VQC — plus = plus expressif mais plus lent
@@ -142,10 +285,24 @@ QLSTM_OPTUNA_SPACE = {
     "batch_size": [8, 16],
 }
 
+QRC_OPTUNA_SPACE = {
+    "n_qubits": [5, 6, 7, 8],
+    "n_layers": [2, 3, 4],
+    "input_scaling": {"low": 0.3, "high": 3.0, "log": True},
+    "reservoir_scale": {"low": 0.2, "high": 2.0, "log": True},
+    "feedback_scale": {"low": 0.0, "high": 1.5},
+    "leak_rate": {"low": 0.1, "high": 0.7},
+    "ridge_alpha": {"low": 1e-3, "high": 50.0, "log": True},
+    "temporal_stride": [4, 6, 8, 12],  # ← Retiré 2 (trop lent, 96 pas)
+    "state_summary": ["last_mean", "last_mean_std"],
+}
+
+#----------------------------------------------------------------------------------------------------------------------------
+
 ESN_OPTUNA_SPACE = {
     "n_reservoir": [100, 150, 200, 300, 400],
     "spectral_radius": {"low": 0.2, "high": 1.4},
-    "sparsity": {"low": 0.80, "high": 0.98},
+    "sparsity": {"low": 0.80, "high": 0.98}, 
     "leak_rate": {"low": 0.05, "high": 1.0},
     "input_scaling": {"low": 0.05, "high": 1.5, "log": True},
     "ridge_alpha": {"low": 1e-4, "high": 100.0, "log": True},
@@ -173,7 +330,7 @@ MESN_OPTUNA_SPACE = {
     "reservoirs": {
         "n_reservoir": {
             "acc": [40, 80, 120, 200],
-            "eda": [20, 40, 80],
+            "ambient": [20, 40, 80],
             "hr": [20, 40, 60],
             "ibi": [20, 40, 60],
             "temp": [20, 40, 60],
@@ -185,19 +342,6 @@ MESN_OPTUNA_SPACE = {
         "input_scaling": {"low": 0.05, "high": 1.5, "log": True},
     },
 }
-
-QRC_OPTUNA_SPACE = {
-    "n_qubits": [5, 6, 7, 8],
-    "n_layers": [2, 3, 4],
-    "input_scaling": {"low": 0.3, "high": 3.0, "log": True},
-    "reservoir_scale": {"low": 0.2, "high": 2.0, "log": True},
-    "feedback_scale": {"low": 0.0, "high": 1.5},
-    "leak_rate": {"low": 0.1, "high": 0.7},
-    "ridge_alpha": {"low": 1e-3, "high": 50.0, "log": True},
-    "temporal_stride": [4, 6, 8, 12],  # ← Retiré 2 (trop lent, 96 pas)
-    "state_summary": ["last_mean", "last_mean_std"],
-}
-
 
 # ══════════════════════════════════════════════════════════════════════
 # 7. WINDOW CONFIGS — adaptatif par participant (LOSO)
@@ -215,18 +359,18 @@ WINDOW_CONFIGS = {
 MODEL_PARAMS = {
     "CNN_1D": {
         "batch_size": 32,
-        "n_conv_blocks": 2,
+        "n_conv_blocks": 3,
         "kernel_size": 5,
-        "filters": 128,
-        "use_batchnorm": False,
+        "filters": 32,
+        "use_batchnorm": True,
         "activation": "relu",
         "pool_size": 3,
-        "global_pooling": "flatten",
-        "l2_reg": 0.0004677279199169856,
-        "optimizer": "rmsprop",
+        "global_pooling": "max",
+        "l2_reg": 0.004384004019043003,
+        "optimizer": "adam",
         "dense_units": 256,
-        "dropout_rate": 0.36790290255054414,
-        "learning_rate": 0.00015679008763782025,
+        "dropout_rate": 0.41303959172498744,
+        "learning_rate": 0.0008280917627432003
     },
     "LSTM": {
         "n_lstm_layers": 1,
@@ -241,29 +385,29 @@ MODEL_PARAMS = {
     },
     "CNN_TCN": {
         "batch_size": 32,
-        "cnn_filters": 64,
+        "cnn_filters": 128,
         "cnn_kernel": 5,
-        "n_tcn_blocks": 3,
-        "tcn_filters": 64,
-        "tcn_kernel": 5,
-        "activation": "relu",
-        "l2_reg": 1.0407988654029368e-05,
-        "optimizer": "rmsprop",
-        "dense_units": 64,
-        "dropout_rate": 0.30275665469524965,
-        "learning_rate": 0.0003734774908783387,
-    },
-    "TCN": {
-        "batch_size": 128,
         "n_tcn_blocks": 4,
         "tcn_filters": 64,
         "tcn_kernel": 5,
         "activation": "relu",
-        "l2_reg": 1.1554221780153881e-05,
+        "l2_reg": 3.612012051387347e-05,
+        "optimizer": "adam",
+        "dense_units": 32,
+        "dropout_rate": 0.39200912336963123,
+        "learning_rate": 0.00039184636569582513
+    },
+    "TCN": {
+        "batch_size": 64,
+        "n_tcn_blocks": 3,
+        "tcn_filters": 128,
+        "tcn_kernel": 3,
+        "activation": "leaky_relu",
+        "l2_reg": 0.0029753822912700384,
         "optimizer": "rmsprop",
         "dense_units": 32,
-        "dropout_rate": 0.3196140167572857,
-        "learning_rate": 0.00032811692941705107,
+        "dropout_rate": 0.4486277698278758,
+        "learning_rate": 0.0007720563684349782
     },
     "CNN_LSTM": {
         "batch_size": 32,
@@ -281,22 +425,28 @@ MODEL_PARAMS = {
         "learning_rate": 0.0005,
     },
     "LGBM": {
-        "objective": "multiclass",
-        "num_class": 3,
-        "metric": "multi_logloss",
-        "n_estimators": 113,
-        "learning_rate": 0.04230441275950031,
-        "num_leaves": 65,
-        "max_depth": 15,
-        "min_child_samples": 16,
-        "subsample": 0.9599864108985356,
-        "colsample_bytree": 0.6738167152482913,
-        "reg_alpha": 0.04566190143949176,
-        "reg_lambda": 0.5002488288570663,
-        "n_jobs": -1,
-        "random_state": 42,
-        "verbose": -1,
+        "n_estimators": 437,
+        "learning_rate": 0.22648248189516848,
+        "num_leaves": 97,
+        "max_depth": -1,
+        "min_child_samples": 44,
+        "subsample": 0.8005575058716043,
+        "colsample_bytree": 0.8540362888980227,
+        "reg_alpha": 0.00012674255898937226,
+        "reg_lambda": 7.072114131472227
     },
+    "XGB": {
+    "n_estimators": 200,
+    "learning_rate": 0.1,
+    "max_depth": 6,
+    "min_child_weight": 1,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "gamma": 0.0,
+    },
+
     "QLSTM": {
         "n_qubits": 2,
         "n_vqc_layers": 1,
@@ -330,6 +480,34 @@ MODEL_PARAMS = {
         "state_summary": "last_mean_std",
         "random_state": 42,
     },
+    "DISTILL_TEACHER": {
+        "patch_size": 16,
+        "d_model": 64,
+        "num_heads": 4,
+        "d_ff": 256,
+        "num_layers": 4,
+        "dropout": 0.1,
+        "dense_units": 64,
+        "learning_rate": 1e-4,
+        "weight_decay": 1e-4,
+        "batch_size": 64,
+    },
+    "DISTILL_STUDENT": {
+        "batch_size": 32,
+        "n_conv_blocks": 2,
+        "kernel_size": 3,
+        "filters": 32,
+        "use_batchnorm": True,
+        "activation": "relu",
+        "pool_size": 2,
+        "global_pooling": "avg",
+        "l2_reg": 1e-4,
+        "optimizer": "adam",
+        "dense_units": 64,
+        "dropout_rate": 0.3,
+        "learning_rate": 5e-4,
+        "alpha": 0.5,
+    },
     "QRC": {
         "n_qubits": 3,
         "n_layers": 1,
@@ -342,4 +520,57 @@ MODEL_PARAMS = {
         "state_summary": "last_mean_std",
         "random_state": 42,
     },
+
+    "MESN" : {
+    "ridge_alpha": 5.0,
+    "washout": 5,
+    "state_summary": "last_mean_std",
+    "min_coverage": 0.35,
+    "random_state": 42,
+    "reservoirs": {
+        "acc": {
+            "n_reservoir": 80,
+            "spectral_radius": 0.75,
+            "sparsity": 0.90,
+            "leak_rate": 0.35,
+            "input_scaling": 0.50,
+        },
+        "ambient": {
+            "n_reservoir": 40,
+            "spectral_radius": 0.60,
+            "sparsity": 0.90,
+            "leak_rate": 0.10,
+            "input_scaling": 0.45,
+        },
+        "hr": {
+            "n_reservoir": 40,
+            "spectral_radius": 0.65,
+            "sparsity": 0.90,
+            "leak_rate": 0.15,
+            "input_scaling": 0.50,
+        },
+        "ibi": {
+            "n_reservoir": 40,
+            "spectral_radius": 0.60,
+            "sparsity": 0.90,
+            "leak_rate": 0.20,
+            "input_scaling": 0.50,
+        },
+        "temp": {
+            "n_reservoir": 40,
+            "spectral_radius": 0.65,
+            "sparsity": 0.90,
+            "leak_rate": 0.10,
+            "input_scaling": 0.45,
+        },
+        "breathing": {
+            "n_reservoir": 70,
+            "spectral_radius": 0.80,
+            "sparsity": 0.92,
+            "leak_rate": 0.30,
+            "input_scaling": 0.50,
+        },
+    },
+    }
+    
 }

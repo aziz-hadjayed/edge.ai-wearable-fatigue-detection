@@ -1,3 +1,4 @@
+# src/utils/apply_smote.py
 import pandas as pd
 import numpy as np
 from imblearn.over_sampling import SMOTE
@@ -88,38 +89,68 @@ def _apply_smote_for_session(group_key, df_session, features):
         f"{label_counts.to_dict()} -> {df_resampled[COL_LABEL].value_counts().to_dict()} "
         f"(+{added})"
     )
-
     return df_resampled
 
-
-def apply_smote():
-    print("Chargement du dataset pour equilibrage par session (sans SMOTE)...")
-    # Charger depuis dataset_no_smote.csv
-    input_path = OUTPUT_PATH_NO_SMOTE
-    if not input_path.exists():
-        # Repli sur DATA_PROCESSED si dataset_no_smote.csv n'existe pas
-        input_path = DATA_PROCESSED
-
-    print(f"Lecture de : {input_path}")
-    df = pd.read_csv(input_path)
-
-    print(f"Distribution globale avant SMOTE :\n{df[COL_LABEL].value_counts()}")
-
-    # Colonnes de features (signaux + age/gender/questionnaires)
-    # On exclut participant, session et timestamp car SMOTE genere des valeurs continues
-    # qui n'auraient pas de sens pour ces metadonnees d'identification.
-    features = [c for c in SIGNAL_COLS if c in df.columns]
-
+def resample_dataframe(df, features):
+    """
+    Applique SMOTE par session sur un DataFrame deja en memoire.
+    Reutilisable a la fois par apply_smote() (pipeline global)
+    et par les scripts de train (SMOTE local a df_fit dans une boucle LOSO).
+    """
     balanced_parts = []
     group_cols = [COL_PARTICIPANT, COL_SESSION]
     for group_key, df_session in df.groupby(group_cols, sort=False):
         balanced_parts.append(
             _apply_smote_for_session(group_key, df_session, features)
         )
-
     df_balanced = pd.concat(balanced_parts, ignore_index=True)
+    return df_balanced
 
-    # Reorganiser les colonnes pour avoir exactement le meme ordre que le fichier d'origine
+def resample_windows_smote(X, y, k_neighbors=5, random_state=42):
+    """
+    Applique SMOTE sur des fenetres 3D (n_samples, window_size, n_features).
+    Aplati chaque fenetre en vecteur 1D pour SMOTE, puis reforme les fenetres.
+    Utilisee quand les donnees sont deja pre-fenetrees (session_windows),
+    contrairement a resample_dataframe qui opere sur des lignes brutes.
+    """
+    n_samples, window_size, n_features = X.shape
+
+    label_counts = pd.Series(y).value_counts()
+    if len(label_counts) < 2:
+        print(f"  SMOTE ignore (une seule classe: {label_counts.to_dict()})")
+        return X, y
+
+    min_class_count = int(label_counts.min())
+    if min_class_count < 2:
+        print(f"  SMOTE ignore (classe trop petite: {label_counts.to_dict()})")
+        return X, y
+
+    k = min(k_neighbors, min_class_count - 1)
+    X_flat = X.reshape(n_samples, window_size * n_features)
+
+    smote = SMOTE(random_state=random_state, k_neighbors=k)
+    X_res_flat, y_res = smote.fit_resample(X_flat, y)
+
+    X_res = X_res_flat.reshape(-1, window_size, n_features)
+    added = len(X_res) - n_samples
+    print(f"  SMOTE : {label_counts.to_dict()} -> "
+          f"{pd.Series(y_res).value_counts().to_dict()} (+{added})")
+
+    return X_res, y_res
+
+def apply_smote():
+    print("Chargement du dataset pour equilibrage par session (sans SMOTE)...")
+    input_path = OUTPUT_PATH_NO_SMOTE
+    if not input_path.exists():
+        input_path = DATA_PROCESSED
+
+    print(f"Lecture de : {input_path}")
+    df = pd.read_csv(input_path)
+    print(f"Distribution globale avant SMOTE :\n{df[COL_LABEL].value_counts()}")
+
+    features = [c for c in SIGNAL_COLS if c in df.columns]
+    df_balanced = resample_dataframe(df, features)  # reutilise la fonction commune
+
     col_order = [COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP] + features + [COL_LABEL]
     df_balanced = df_balanced[col_order]
 
@@ -130,7 +161,6 @@ def apply_smote():
     print(f"\nDataset equilibre sauvegarde dans : {output_path}")
     print(f"Distribution globale apres SMOTE :\n{df_balanced[COL_LABEL].value_counts()}")
     print(f"Taille finale : {len(df_balanced)} lignes")
-
 
 if __name__ == "__main__":
     apply_smote()
