@@ -15,7 +15,22 @@ yolov8n-cls.pt
 yolov8n.pt
 runs/
 
+# Python
+*.pyo
 
+# Fichiers compilés (STM32, C, C++)
+*.o
+*.elf
+*.map
+*.hex
+*.bin
+*.lst
+*.crf
+*.htm
+*.dep
+
+# Logs
+*.log
 
 # Fichiers temporaires
 __pycache__/
@@ -23,6 +38,15 @@ __pycache__/
 .ipynb_checkpoints/
 .claude/
 .vscode/
+
+# STM32 AI
+st_ai_ws/build_rt_network/*.o
+st_ai_ws/build_rt_network/*.elf
+st_ai_ws/build_rt_network/*.map
+
+# IDE
+.idea/
+*.swp
 
 # Secrets
 .env
