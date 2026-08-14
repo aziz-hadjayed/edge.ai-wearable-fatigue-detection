@@ -110,10 +110,10 @@ STM32_RAM_KB = 1433  # STM32H7A3ZIT6Q
 # 5. OPTUNA — FLAGS & CHEMINS DE RÉSULTATS
 # ══════════════════════════════════════════════════════════════════════
 USE_OPTUNA_CNN_1D = True
-USE_OPTUNA_LSTM = True
-USE_OPTUNA_CNN_TCN = True
+USE_OPTUNA_LSTM = False
+USE_OPTUNA_CNN_TCN = False
 USE_OPTUNA_TCN = True
-USE_OPTUNA_CNN_LSTM = True
+USE_OPTUNA_CNN_LSTM = False
 
 USE_OPTUNA_LGBM = True
 USE_OPTUNA_XGB = True
@@ -288,7 +288,7 @@ QLSTM_OPTUNA_SPACE = {
 QRC_OPTUNA_SPACE = {
     "n_qubits": [5, 6, 7, 8],
     "n_layers": [2, 3, 4],
-    "input_scaling": {"low": 0.3, "high": 3.0, "log": True},
+    "input_scaling": {"low": 0.05, "high": 1.0, "log": True},
     "reservoir_scale": {"low": 0.2, "high": 2.0, "log": True},
     "feedback_scale": {"low": 0.0, "high": 1.5},
     "leak_rate": {"low": 0.1, "high": 0.7},
@@ -383,6 +383,16 @@ MODEL_PARAMS = {
         "learning_rate": 0.00044691892803364514,
         "batch_size": 32,
     },
+    "LSTM de optuna dernier run": {
+            "n_lstm_layers": 1,
+            "lstm_units": 32,
+            "bidirectional": True,
+            "dense_units": 128,
+            "dropout_rate": 0.40111054193208334,
+            "l2_reg": 0.006873016554617295,
+            "learning_rate": 0.002318363915331103,
+            "batch_size": 32
+    },
     "CNN_TCN": {
         "batch_size": 32,
         "cnn_filters": 128,
@@ -397,6 +407,21 @@ MODEL_PARAMS = {
         "dropout_rate": 0.39200912336963123,
         "learning_rate": 0.00039184636569582513
     },
+    "CNN_LSTM":{
+        "batch_size": 32,
+        "cnn_filters": 64,
+        "cnn_kernel": 3,
+        "n_conv_blocks": 3,
+        "pool_size": 3,
+        "lstm_units": 128,
+        "bidirectional": True,
+        "activation": "leaky_relu",
+        "l2_reg": 0.00347312383864753,
+        "optimizer": "adam",
+        "dense_units": 32,
+        "dropout_rate": 0.22700687336676065,
+        "learning_rate": 0.000748237189143471
+    },
     "TCN": {
         "batch_size": 64,
         "n_tcn_blocks": 3,
@@ -408,21 +433,6 @@ MODEL_PARAMS = {
         "dense_units": 32,
         "dropout_rate": 0.4486277698278758,
         "learning_rate": 0.0007720563684349782
-    },
-    "CNN_LSTM": {
-        "batch_size": 32,
-        "cnn_filters": 64,
-        "cnn_kernel": 5,
-        "n_conv_blocks": 2,
-        "pool_size": 2,
-        "lstm_units": 64,
-        "bidirectional": False,
-        "activation": "relu",
-        "l2_reg": 1e-4,
-        "optimizer": "adam",
-        "dense_units": 64,
-        "dropout_rate": 0.3,
-        "learning_rate": 0.0005,
     },
     "LGBM": {
         "n_estimators": 437,
@@ -522,55 +532,54 @@ MODEL_PARAMS = {
     },
 
     "MESN" : {
-    "ridge_alpha": 5.0,
-    "washout": 5,
-    "state_summary": "last_mean_std",
-    "min_coverage": 0.35,
-    "random_state": 42,
-    "reservoirs": {
-        "acc": {
-            "n_reservoir": 80,
-            "spectral_radius": 0.75,
-            "sparsity": 0.90,
-            "leak_rate": 0.35,
-            "input_scaling": 0.50,
-        },
-        "ambient": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.60,
-            "sparsity": 0.90,
-            "leak_rate": 0.10,
-            "input_scaling": 0.45,
-        },
-        "hr": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.65,
-            "sparsity": 0.90,
-            "leak_rate": 0.15,
-            "input_scaling": 0.50,
-        },
-        "ibi": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.60,
-            "sparsity": 0.90,
-            "leak_rate": 0.20,
-            "input_scaling": 0.50,
-        },
-        "temp": {
-            "n_reservoir": 40,
-            "spectral_radius": 0.65,
-            "sparsity": 0.90,
-            "leak_rate": 0.10,
-            "input_scaling": 0.45,
-        },
-        "breathing": {
-            "n_reservoir": 70,
-            "spectral_radius": 0.80,
-            "sparsity": 0.92,
-            "leak_rate": 0.30,
-            "input_scaling": 0.50,
-        },
-    },
+        "ridge_alpha": 0.5617197644275693,
+        "washout": 0,
+        "state_summary": "last_mean_std",
+        "min_coverage": 0.3532539281450102,
+        "random_state": 42,
+        "reservoirs": {
+            "acc": {
+                "n_reservoir": 200,
+                "spectral_radius": 0.8868691168996753,
+                "sparsity": 0.9654014708429202,
+                "leak_rate": 0.7185960594010997,
+                "input_scaling": 0.20599342543830018
+            },
+            "ambient": {
+                "n_reservoir": 80,
+                "spectral_radius": 1.1832418542857157,
+                "sparsity": 0.9639639007570672,
+                "leak_rate": 0.39576016255301916,
+                "input_scaling": 0.7019561164367488
+            },
+            "hr": {
+                "n_reservoir": 60,
+                "spectral_radius": 0.9554788965712058,
+                "sparsity": 0.8878071135425127,
+                "leak_rate": 0.33159232923633486,
+                "input_scaling": 0.056810378023327494
+            },
+            "ibi": {
+                "n_reservoir": 20,
+                "spectral_radius": 1.1980179295026065,
+                "sparsity": 0.9473013259954898,
+                "leak_rate": 0.4715080087104783,
+                "input_scaling": 0.6299332968311588
+            },
+            "temp": {
+                "n_reservoir": 40,
+                "spectral_radius": 0.3757945542965706,
+                "sparsity": 0.8760651524610491,
+                "leak_rate": 0.596043139415017,
+                "input_scaling": 1.3927337457057325
+            },
+            "breathing": {
+                "n_reservoir": 70,
+                "spectral_radius": 0.6567098047512803,
+                "sparsity": 0.881578233604194,
+                "leak_rate": 0.6736843364131624,
+                "input_scaling": 0.09011997063968813
+            }
+        }
     }
-    
 }

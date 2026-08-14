@@ -45,6 +45,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # 1. CONSTANTES
 # ============================================================================
 MODEL_NAME = "MESN"
+TARGET_FREQ_CAP_HZ = 1.0
 LABEL_MAPPING = {"baseline": 0, "activity": 1, "pre_fatigue": 2, "fatigue": 3}
 TARGET_NAMES = ["baseline", "activity", "pre_fatigue", "fatigue"]
 
@@ -480,15 +481,66 @@ def _sensor_window(df, start_ms, end_ms, value_cols):
     return df.loc[mask, value_cols].to_numpy(dtype=np.float32)
 
 
+def _downsample_factor(sensor_name, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
+    freq = float(sensor_specs[sensor_name]["freq"])
+    return max(1, int(freq // TARGET_FREQ_CAP_HZ))
+
+
+def _effective_freq(sensor_name, sensor_specs=None):
+    if sensor_specs is None:
+        sensor_specs = SENSOR_SPECS
+    freq = float(sensor_specs[sensor_name]["freq"])
+    return freq / _downsample_factor(sensor_name, sensor_specs=sensor_specs)
+
+
+def _downsample_block_average(x, factor):
+    """
+    Sous-echantillonne par moyennage de blocs consecutifs. Le dernier bloc
+    incomplet est tronque pour garder un filtrage simple et deterministe, et
+    eviter un simple stride qui introduirait davantage d'aliasing.
+    """
+    if factor <= 1 or len(x) < factor:
+        return x
+    n_blocks = len(x) // factor
+    trimmed = x[: n_blocks * factor]
+    return trimmed.reshape(n_blocks, factor, x.shape[1]).mean(axis=1)
+
+
+def _fix_sensor_window_length(x_raw, n_steps, n_features):
+    if len(x_raw) >= n_steps:
+        return x_raw[-n_steps:]
+    if len(x_raw) == 0:
+        x_fixed = np.zeros((n_steps, n_features * 2), dtype=np.float32)
+        x_fixed[:, n_features:] = 1.0
+        return x_fixed
+
+    pad = np.zeros((n_steps - len(x_raw), n_features * 2), dtype=np.float32)
+    pad[:, n_features:] = 1.0
+    return np.concatenate([pad, x_raw], axis=0).astype(np.float32)
+
+
 def _sensor_inputs(df, sensor_name, start_ms, end_ms, scalers, sensor_specs=None):
     if sensor_specs is None:
         sensor_specs = SENSOR_SPECS
     value_cols = list(sensor_specs[sensor_name]["cols"].values())
     missing_cols = [f"{col}_missing" for col in value_cols]
+    n_features = len(value_cols)
     x_values = _sensor_window(df, start_ms, end_ms, value_cols)
     x_missing = _sensor_window(df, start_ms, end_ms, missing_cols)
-    x_values = scalers[sensor_name].transform(x_values).astype(np.float32)
-    return np.concatenate([x_values, x_missing.astype(np.float32)], axis=1)
+    factor = _downsample_factor(sensor_name, sensor_specs=sensor_specs)
+    x_values = _downsample_block_average(x_values, factor)
+    x_missing = _downsample_block_average(x_missing, factor)
+    x_raw = np.concatenate([x_values, x_missing.astype(np.float32)], axis=1).astype(np.float32)
+
+    # Meme convention que l'entree ONNX statique : downsampling, puis
+    # troncature/padding brut a la taille nominale, puis RobustScaler.
+    n_steps = _nominal_sensor_steps(sensor_specs, end_ms - start_ms)[sensor_name]
+    x_raw = _fix_sensor_window_length(x_raw, n_steps, n_features)
+    x_values = scalers[sensor_name].transform(x_raw[:, :n_features]).astype(np.float32)
+    x_missing = x_raw[:, n_features:].astype(np.float32)
+    return np.concatenate([x_values, x_missing], axis=1)
 
 
 def _has_min_coverage(sensor_name, x, window_ms, params, sensor_specs=None):
@@ -958,14 +1010,15 @@ def _extract_readout_weights(readout_model):
 def _nominal_sensor_steps(sensor_specs, window_ms):
     """
     Nombre de pas de temps NOMINAL par capteur pour une entree ONNX de taille
-    fixe : round(freq * window_ms / 1000), la couverture "attendue" au sens de
-    _has_min_coverage -- PAS le nombre reel de points d'une fenetre donnee, qui
-    varie d'une fenetre a l'autre selon les trous/artefacts du signal. Les
-    fenetres reelles sont tronquees/completees a cette taille fixe avant
-    d'entrer dans le graphe (voir _extract_raw_sensor_windows).
+    fixe : round(freq_effective * window_ms / 1000), apres sous-echantillonnage
+    par moyennage de blocs. La couverture "attendue" au sens de
+    _has_min_coverage reste calculee sur les frequences brutes, AVANT
+    sous-echantillonnage. Les fenetres reelles sont tronquees/completees a
+    cette taille fixe avant d'entrer dans le graphe (voir
+    _extract_raw_sensor_windows).
     """
     return {
-        name: max(1, int(round(spec["freq"] * window_ms / 1000)))
+        name: max(1, int(round(_effective_freq(name, sensor_specs=sensor_specs) * window_ms / 1000)))
         for name, spec in sensor_specs.items()
     }
 
@@ -993,6 +1046,13 @@ def _build_onnx_mesn_graph(reservoirs, scalers, readout_model, params, sensor_sp
     le nombre de pas NOMINAL (_nominal_sensor_steps), pas le nombre reel de
     points d'une fenetre donnee. A l'inference, les fenetres reelles doivent
     etre tronquees/completees a cette taille fixe (voir _extract_raw_sensor_windows).
+
+    NOTE DOWNSAMPLING : le sous-echantillonnage par moyennage de blocs est fait
+    en amont du graphe, dans le chemin Python (_sensor_inputs) et lors de la
+    reconstruction des entrees ONNX (_extract_raw_sensor_windows). Le graphe ne
+    contient donc pas de noeud AveragePool. Si le firmware STM32 doit consommer
+    directement les donnees capteur brutes sans pre-agregation, il faudra
+    envisager d'integrer ce moyennage dans le graphe via AveragePool.
 
     NOTE DE CORRECTION (vs le graphe ESN mono-capteur de train_esn.py, dont le
     pattern de deroulement recurrent a servi de reference) : la reutilisation
@@ -1264,19 +1324,14 @@ def _extract_raw_sensor_windows(sessions, params, sensor_specs, n_steps_by_senso
                     break
 
                 x_missing = _sensor_window(df_sensor, start, end, missing_cols)
+                factor = _downsample_factor(sensor_name, sensor_specs=sensor_specs)
+                x_values = _downsample_block_average(x_values, factor)
+                x_missing = _downsample_block_average(x_missing, factor)
                 x_raw = np.concatenate([x_values, x_missing.astype(np.float32)], axis=1).astype(np.float32)
 
                 n_steps = n_steps_by_sensor[sensor_name]
                 n_features = len(value_cols)
-                if len(x_raw) >= n_steps:
-                    x_fixed = x_raw[-n_steps:]
-                elif len(x_raw) == 0:
-                    x_fixed = np.zeros((n_steps, n_features * 2), dtype=np.float32)
-                    x_fixed[:, n_features:] = 1.0
-                else:
-                    pad = np.zeros((n_steps - len(x_raw), n_features * 2), dtype=np.float32)
-                    pad[:, n_features:] = 1.0
-                    x_fixed = np.concatenate([pad, x_raw], axis=0)
+                x_fixed = _fix_sensor_window_length(x_raw, n_steps, n_features)
 
                 per_sensor[sensor_name] = x_fixed
 

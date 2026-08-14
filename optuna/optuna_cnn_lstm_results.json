@@ -1,0 +1,18 @@
+{
+    "best_value": 0.8300468139060071,
+    "best_params": {
+        "batch_size": 32,
+        "cnn_filters": 64,
+        "cnn_kernel": 3,
+        "n_conv_blocks": 3,
+        "pool_size": 3,
+        "lstm_units": 128,
+        "bidirectional": true,
+        "activation": "leaky_relu",
+        "l2_reg": 0.00347312383864753,
+        "optimizer": "adam",
+        "dense_units": 32,
+        "dropout_rate": 0.22700687336676065,
+        "learning_rate": 0.000748237189143471
+    }
+}

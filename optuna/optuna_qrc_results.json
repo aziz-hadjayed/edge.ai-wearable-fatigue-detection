@@ -1,14 +1,14 @@
 {
-    "best_value": 0.6576538897848453,
+    "best_value": 0.2923397350092985,
     "best_params": {
-        "n_qubits": 4,
-        "n_layers": 2,
-        "input_scaling": 0.06674993524936805,
-        "reservoir_scale": 0.05117445785208566,
-        "feedback_scale": 0.5685889185558882,
-        "leak_rate": 0.8824190181033995,
-        "ridge_alpha": 2.548862451436103,
-        "temporal_stride": 4,
-        "state_summary": "last_mean_std"
+        "n_qubits": 5,
+        "n_layers": 3,
+        "input_scaling": 1.759513189002724,
+        "reservoir_scale": 1.0800685835359658,
+        "feedback_scale": 0.7520909212360682,
+        "leak_rate": 0.5889264176652077,
+        "ridge_alpha": 0.0014739652290807134,
+        "temporal_stride": 12,
+        "state_summary": "last_mean"
     }
 }

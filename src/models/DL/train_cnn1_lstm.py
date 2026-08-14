@@ -2,10 +2,12 @@ import gc
 import json
 import os
 import sys
+import traceback
 import warnings
 from pathlib import Path
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
 os.environ['TF_CUDNN_USE_AUTOTUNE'] = '0'
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
@@ -20,6 +22,7 @@ import numpy as np
 import optuna
 import pandas as pd
 import tensorflow as tf
+import tensorflow_model_optimization as tfmot
 
 # Supprimer la verbosité lors de la conversion TFLite
 tf.get_logger().setLevel('ERROR')
@@ -38,7 +41,7 @@ if gpus:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import *
 
-from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score
+from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
 from tensorflow.keras.layers import (
@@ -48,9 +51,10 @@ from tensorflow.keras.layers import (
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam, RMSprop
 from tensorflow.keras.regularizers import l2
-from keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping, TerminateOnNaN
+from tensorflow.keras.utils import to_categorical
 from models.semi_supervised import add_pseudo_labels, extract_all_windows , extract_windows
+from utils.apply_smote import resample_dataframe
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
@@ -115,7 +119,8 @@ def _clone_model_for_tflite(model):
     def clone_layer(layer):
         if isinstance(layer, LSTM):
             config = layer.get_config()
-            config["use_cudnn"] = False
+            if "use_cudnn" in config:
+                config["use_cudnn"] = False
             config["unroll"] = True
             return LSTM.from_config(config)
 
@@ -125,7 +130,8 @@ def _clone_model_for_tflite(model):
                 inner = config.get(key)
                 if isinstance(inner, dict) and inner.get("class_name") == "LSTM":
                     inner_config = dict(inner.get("config", {}))
-                    inner_config["use_cudnn"] = False
+                    if "use_cudnn" in inner_config:
+                        inner_config["use_cudnn"] = False
                     inner_config["unroll"] = True
                     config[key] = {**inner, "config": inner_config}
             return Bidirectional.from_config(config)
@@ -223,7 +229,7 @@ def precompute_session_windows(df, window_size, step_size):
     if COL_TIMESTAMP in df.columns:
         df = df.sort_values([COL_PARTICIPANT, COL_SESSION, COL_TIMESTAMP])
     for (part, sess), group in df.groupby([COL_PARTICIPANT, COL_SESSION]):
-        wx, wy = extract_windows(group, window_size, step_size)
+        wx, wy = extract_windows(group, window_size, step_size, SIGNAL_COLS, COL_LABEL)
         if wx:
             session_windows[(part, sess)] = (np.array(wx, dtype=np.float16), np.array(wy))
     total_mb = sum(x.nbytes for x, _ in session_windows.values()) / 1024 ** 2
@@ -252,6 +258,11 @@ def build_model(trial, input_shape, num_classes):
     dense_units    = trial.suggest_categorical("dense_units",   CNN_LSTM_OPTUNA_SPACE["dense_units"])
     dropout_rate   = trial.suggest_float("dropout_rate",  *CNN_LSTM_OPTUNA_SPACE["dropout_rate"])
     learning_rate  = trial.suggest_float("learning_rate", *CNN_LSTM_OPTUNA_SPACE["learning_rate"], log=True)
+
+    if isinstance(trial, optuna.trial.Trial) and not trial.user_attrs.get("params_printed", False):
+        print(f"\nTrial {trial.number} — hyperparamètres Optuna :")
+        print(json.dumps(trial.params, indent=2, sort_keys=True))
+        trial.set_user_attr("params_printed", True)
 
     act_name = "relu" if activation == "relu" else activation
 
@@ -393,33 +404,174 @@ def optimize_hyperparams(df, num_classes, n_trials=N_OPTUNA_TRIALS, n_optuna_epo
 # ══════════════════════════════════════════════════════════════════════
 # 9. MODÈLE GLOBAL
 # ══════════════════════════════════════════════════════════════════════
+def _compute_classification_metrics(y_true, y_pred):
+    return {
+        "f1_macro": float(f1_score(y_true, y_pred, average="macro", zero_division=0)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+        "precision_macro": float(precision_score(y_true, y_pred, average="macro", zero_division=0)),
+        "recall_macro": float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
+        "precision_fatigue": float(precision_score(y_true, y_pred, labels=[3], average="macro", zero_division=0)),
+        "recall_fatigue": float(recall_score(y_true, y_pred, labels=[3], average="macro", zero_division=0)),
+    }
+
+def _predict_tflite(tflite_path, X_data):
+    interpreter = tf.lite.Interpreter(model_path=str(tflite_path))
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()[0]
+    output_details = interpreter.get_output_details()[0]
+
+    input_scale, input_zero_point = input_details["quantization"]
+    output_scale, output_zero_point = output_details["quantization"]
+    input_dtype = input_details["dtype"]
+    output_dtype = output_details["dtype"]
+    predictions = []
+
+    for sample in X_data:
+        x = sample[np.newaxis, ...].astype(np.float32)
+        if input_dtype in (np.int8, np.uint8):
+            x = np.round(x / input_scale + input_zero_point)
+            x = np.clip(x, np.iinfo(input_dtype).min, np.iinfo(input_dtype).max).astype(input_dtype)
+        else:
+            x = x.astype(input_dtype)
+
+        interpreter.set_tensor(input_details["index"], x)
+        interpreter.invoke()
+        y = interpreter.get_tensor(output_details["index"])
+        if output_dtype in (np.int8, np.uint8):
+            y = (y.astype(np.float32) - output_zero_point) * output_scale
+        predictions.append(int(np.argmax(y, axis=1)[0]))
+
+    return np.array(predictions)
+
+def _save_edge_comparison_metrics(model_name, edge_metrics):
+    curr_metrics = {}
+    if METRICS_PATH.exists():
+        try:
+            with open(METRICS_PATH, "r") as f:
+                content = f.read().strip()
+            curr_metrics = json.loads(content) if content else {}
+        except (json.JSONDecodeError, ValueError):
+            print(f"⚠ metrics.json invalide ou vide, réinitialisation : {METRICS_PATH}")
+            curr_metrics = {}
+
+    curr_metrics.setdefault(model_name, {})
+    curr_metrics[model_name]["edge_comparison"] = edge_metrics
+    with open(METRICS_PATH, "w") as f:
+        json.dump(curr_metrics, f, indent=4)
+    print(f"  Comparaison edge → {METRICS_PATH}")
+
+def _apply_pruning_and_finetune(model, X_tr, y_tr, X_vl, y_vl, weight_dict,
+                                final_sparsity=0.5, pruning_epochs=20, batch_size=32):
+    num_classes = model.output_shape[-1]
+    steps_per_epoch = max(1, len(X_tr) // batch_size)
+    pruning_schedule = tfmot.sparsity.keras.PolynomialDecay(
+        initial_sparsity=0.0,
+        final_sparsity=final_sparsity,
+        begin_step=0,
+        end_step=steps_per_epoch * pruning_epochs,
+    )
+
+    def _clone_for_pruning(layer):
+        # Conv1D et Dense sont prunables. Les autres couches (LSTM,
+        # Bidirectional, BatchNormalization, MaxPooling1D, Activation,
+        # Dropout, InputLayer) sont reconstruites via from_config pour
+        # éviter tout partage d'objet avec le modèle original — voir
+        # _clone_model_for_tflite() dans ce même fichier pour le même
+        # principe déjà appliqué.
+        if isinstance(layer, (Conv1D, Dense)):
+            return tfmot.sparsity.keras.prune_low_magnitude(
+                layer, pruning_schedule=pruning_schedule
+            )
+        return layer.__class__.from_config(layer.get_config())
+
+    model_prunable = tf.keras.models.clone_model(
+        model, clone_function=_clone_for_pruning
+    )
+
+    # Transfert des poids pré-entraînés couche par couche. Les couches
+    # wrappées en PruneLowMagnitude exposent l'original via .layer.
+    pruning_wrapper_cls = getattr(tfmot.sparsity.keras, "PruneLowMagnitude", None)
+    for orig_layer, cloned_layer in zip(model.layers, model_prunable.layers):
+        is_pruning_wrapper = (
+            isinstance(cloned_layer, pruning_wrapper_cls)
+            if pruning_wrapper_cls is not None
+            else cloned_layer.__class__.__name__ == "PruneLowMagnitude" and hasattr(cloned_layer, "layer")
+        )
+        if is_pruning_wrapper:
+            cloned_layer.layer.set_weights(orig_layer.get_weights())
+        elif orig_layer.get_weights():
+            cloned_layer.set_weights(orig_layer.get_weights())
+
+    optimizer = tf.keras.optimizers.deserialize(
+        tf.keras.optimizers.serialize(model.optimizer)
+    )
+    model_prunable.compile(
+        optimizer=optimizer,
+        loss="categorical_crossentropy",
+        metrics=["accuracy"],
+    )
+    model_prunable.fit(
+        X_tr, to_categorical(y_tr, num_classes),
+        validation_data=(X_vl, to_categorical(y_vl, num_classes)),
+        epochs=pruning_epochs,
+        batch_size=batch_size,
+        callbacks=[
+            tfmot.sparsity.keras.UpdatePruningStep(),
+            EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True),
+            TerminateOnNaN(),
+        ],
+        class_weight=weight_dict,
+        verbose=1,
+    )
+    model_stripped = tfmot.sparsity.keras.strip_pruning(model_prunable)
+    _free_memory(model_prunable)
+    return model_stripped
+
 def train_global_model(df_labeled, df_unlabeled, best_params, num_classes):
     print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
     config = WINDOW_CONFIGS["default"]
     W_SIZE, S_SIZE, EPOCHS = config["window_size"], config["step_size"], config["epochs"]
 
-    df_all = df_labeled.copy()
+    # Split 90/10 par SESSION (pas par fenêtre), pour éviter toute fuite
+    # participant/session entre train et val
+    unique_sessions_all = [
+        tuple(x) for x in df_labeled[[COL_PARTICIPANT, COL_SESSION]].drop_duplicates().values
+    ]
+    rng = np.random.default_rng(42)
+    shuffled = rng.permutation(len(unique_sessions_all))
+    split_point = int(0.9 * len(unique_sessions_all))
+    train_sessions_g = [unique_sessions_all[i] for i in shuffled[:split_point]]
+    val_sessions_g   = [unique_sessions_all[i] for i in shuffled[split_point:]]
+
+    df_tr_raw = df_labeled[
+        df_labeled.set_index([COL_PARTICIPANT, COL_SESSION]).index.isin(train_sessions_g)
+    ].copy()
+    df_vl_raw = df_labeled[
+        df_labeled.set_index([COL_PARTICIPANT, COL_SESSION]).index.isin(val_sessions_g)
+    ].copy()
+
+    # SMOTE seulement sur le train, avant le scaling et l'extraction de fenêtres
+    df_tr_raw = resample_dataframe(df_tr_raw, SIGNAL_COLS)
+
     scaler = RobustScaler()
-    df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
+    df_tr_raw[SIGNAL_COLS] = scaler.fit_transform(df_tr_raw[SIGNAL_COLS])
+    df_vl_raw[SIGNAL_COLS] = scaler.transform(df_vl_raw[SIGNAL_COLS])
     df_unl = df_unlabeled.copy()
     if len(df_unl) > 0:
         df_unl[SIGNAL_COLS] = scaler.transform(df_unl[SIGNAL_COLS])
 
-    X_all, y_all = extract_all_windows(df_all, W_SIZE, S_SIZE)
+    X_tr, y_tr = extract_all_windows(df_tr_raw, W_SIZE, S_SIZE)
+    X_vl, y_vl = extract_all_windows(df_vl_raw, W_SIZE, S_SIZE)
     X_unlabeled, _ = (
         extract_all_windows(df_unl, W_SIZE, S_SIZE)
         if len(df_unl) > 0 else (np.array([]), np.array([]))
     )
-    del df_all, df_unl
+    del df_tr_raw, df_vl_raw, df_unl
     gc.collect()
-    print(f"  Fenêtres labellisées : {len(X_all)} | unlabeled : {len(X_unlabeled)}")
+    print(f"  Fenêtres labellisées : train={len(X_tr)} val={len(X_vl)} | unlabeled : {len(X_unlabeled)}")
 
     model = None
     try:
-        idx = np.random.default_rng(42).permutation(len(X_all))
-        split = int(0.9 * len(X_all))
-        X_tr, y_tr = X_all[idx[:split]], y_all[idx[:split]]
-        X_vl, y_vl = X_all[idx[split:]], y_all[idx[split:]]
         model = build_model(
             optuna.trial.FixedTrial(best_params),
             (W_SIZE, len(SIGNAL_COLS)), num_classes
@@ -457,18 +609,57 @@ def train_global_model(df_labeled, df_unlabeled, best_params, num_classes):
                 verbose=1,
             )
             X_repr = np.concatenate([X_tr_v2, X_vl], axis=0)
+            X_tr_final, y_tr_final, weight_dict_final = X_tr_v2, y_tr_v2, weight_dict_v2
         else:
-            X_repr = X_all
+            X_repr = np.concatenate([X_tr, X_vl], axis=0)
+            X_tr_final, y_tr_final, weight_dict_final = X_tr, y_tr, weight_dict
 
         models_dir = MODELS_DIR / "CNN-LSTM"
         models_dir.mkdir(parents=True, exist_ok=True)
-        _save_tflite_int8(model, X_repr, models_dir, f"{MODEL_NAME}_global")
-        print(f"  Modèle global exporté (.tflite + .h).")
+
+        # --- Étape 1 : modèle natif NON prunné → .keras + métriques "float32" ---
+        float32_path = models_dir / f"{MODEL_NAME}_global_float32.keras"
+        model.save(float32_path)
+        y_pred_float32 = np.argmax(model.predict(X_vl, verbose=0), axis=1)
+        float32_metrics = _compute_classification_metrics(y_vl, y_pred_float32)
+        float32_metrics["model_size_kb"] = float(float32_path.stat().st_size / 1024)
+
+        # --- Étape 2 : pruning (Conv1D + Dense), avec repli propre en cas d'échec ---
+        model_for_export = model
+        try:
+            print("  Pruning magnitude (Conv1D + Dense) : fine-tuning...")
+            model_for_export = _apply_pruning_and_finetune(
+                model, X_tr_final, y_tr_final, X_vl, y_vl, weight_dict_final,
+                batch_size=best_params.get("batch_size", 32),
+            )
+            print("  Pruning magnitude appliqué avec succès.")
+        except Exception as exc:
+            print(f"  Pruning magnitude échoué ({type(exc).__name__}: {exc}) — repli sur le modèle non prunné pour l'export TFLite.")
+            traceback.print_exc()
+            model_for_export = model
+
+        # --- Étape 3 : export TFLite INT8 du modèle prunné (ou du repli) → .tflite + .h ---
+        _save_tflite_int8(model_for_export, X_repr, models_dir, f"{MODEL_NAME}_global")
+        tflite_path = models_dir / f"{MODEL_NAME}_global_int8.tflite"
+        y_pred_tflite = _predict_tflite(tflite_path, X_vl)
+        tflite_metrics = _compute_classification_metrics(y_vl, y_pred_tflite)
+        tflite_metrics["model_size_kb"] = float(tflite_path.stat().st_size / 1024)
+
+        edge_metrics = {
+            "float32": float32_metrics,
+            "int8_tflite": tflite_metrics,
+        }
+        _save_edge_comparison_metrics(MODEL_NAME, edge_metrics)
+        print(f"  Modèle global exporté (.keras + .tflite + .h).")
+        print(f"  Comparaison edge sauvegardée dans {METRICS_PATH}")
+
+        if model_for_export is not model:
+            _free_memory(model_for_export)
     except Exception as exc:
         print(f"  Modèle global échoué ({type(exc).__name__}: {exc})")
     finally:
         _free_memory(model)
-        del X_all, y_all
+        del X_tr, y_tr, X_vl, y_vl
         gc.collect()
 
 # ══════════════════════════════════════════════════════════════════════
@@ -516,6 +707,9 @@ def main():
 
         df_fit = df_pool[~((df_pool[COL_PARTICIPANT] == val_part) & (df_pool[COL_SESSION] == val_sess))].copy()
         df_val = df_pool[ (df_pool[COL_PARTICIPANT] == val_part)  & (df_pool[COL_SESSION] == val_sess)].copy()
+
+        # SMOTE seulement sur df_fit, avant le scaling et l'extraction de fenêtres
+        df_fit = resample_dataframe(df_fit, SIGNAL_COLS)
 
         scaler = RobustScaler()
         df_fit[SIGNAL_COLS]  = scaler.fit_transform(df_fit[SIGNAL_COLS])

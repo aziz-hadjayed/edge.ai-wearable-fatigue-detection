@@ -81,8 +81,8 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 MODEL_NAME        = "TCN"
 LABEL_MAPPING     = {0: 0, 1: 1, 2: 2, 3: 3}
 TARGET_NAMES      = ["baseline", "activity", "pre_fatigue", "fatigue"]
-N_OPTUNA_SESSIONS  = 15      # réduit : moins de folds par trial → moins de RAM cumulée
-N_OPTUNA_TRIALS    = 50     # réduit : budget serré sur 16 GB RAM
+N_OPTUNA_SESSIONS  = 25     # réduit : moins de folds par trial → moins de RAM cumulée
+N_OPTUNA_TRIALS    = 60   # réduit : budget serré sur 16 GB RAM
 N_OPTUNA_EPOCHS    = 5      # réduit : convergence rapide suffit pour le ranking
 MAX_OPTUNA_SAMPLES = 2000   # plafond fenêtres train par fold Optuna (évite OOM)
 

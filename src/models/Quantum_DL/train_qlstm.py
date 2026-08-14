@@ -50,6 +50,8 @@ if gpus:
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from config import *
 
+from utils.apply_smote import resample_dataframe
+
 from sklearn.metrics import balanced_accuracy_score, confusion_matrix, f1_score
 from sklearn.preprocessing import RobustScaler
 from sklearn.utils.class_weight import compute_class_weight
@@ -67,8 +69,8 @@ warnings.filterwarnings("ignore")
 # 2. CONSTANTES LOCALES
 # ══════════════════════════════════════════════════════════════════════
 MODEL_NAME        = "QLSTM"
-LABEL_MAPPING     = {-1: 0, 0: 1, 1: 2}
-TARGET_NAMES      = ["baseline (-1)", "activity (0)", "fatigue (1)"]
+LABEL_MAPPING     = {0: 0, 1: 1, 2: 2, 3: 3}
+TARGET_NAMES      = ["baseline", "activity", "pre_fatigue", "fatigue"]
 
 # Fenêtre réduite vs modèles classiques : le RNN se déroule pas-à-pas,
 # chaque timestep appelle 4 VQCs → coût proportionnel à window_size.
@@ -134,10 +136,10 @@ class VQCLayer(tf.keras.layers.Layer):
         batch_size = inputs.shape[0]
         if batch_size is None:
             batch_size = int(tf.shape(inputs)[0])
+        w64 = tf.cast(self.vqc_weights, tf.float64)  # deplace hors de la boucle
         results = []
         for i in range(int(batch_size)):
             x64 = tf.cast(inputs[i], tf.float64)
-            w64 = tf.cast(self.vqc_weights, tf.float64)
             results.append(tf.cast(tf.stack(self._circuit(x64, w64)), tf.float32))
         return tf.stack(results, axis=0)
 
@@ -175,11 +177,12 @@ class QLSTMCell(tf.keras.layers.Layer):
       - La Dense projette vers n_qubits et apprend quelle info encode
     """
 
-    def __init__(self, n_qubits: int, n_vqc_layers: int, n_features: int, **kwargs):
+    def __init__(self, n_qubits: int, n_vqc_layers: int, n_features: int, gate_scale: float = 1.0, **kwargs):
         super().__init__(**kwargs)
         self.n_qubits     = n_qubits
         self.n_vqc_layers = n_vqc_layers
         self.n_features   = n_features
+        self.gate_scale   = float(gate_scale)
 
         # 4 VQCLayer indépendants — poids quantiques séparés par gate
         # Chaque VQCLayer crée son propre device default.qubit en interne
@@ -247,10 +250,10 @@ class QLSTMCell(tf.keras.layers.Layer):
         o_q = self.qkl_o(a_o)
 
         # Activations sur les sorties quantiques → plages LSTM standards
-        i_t = tf.math.sigmoid(i_q)   # input gate  [0, 1]
-        f_t = tf.math.sigmoid(f_q)   # forget gate [0, 1]
-        g_t = tf.math.tanh(g_q)      # cell gate   [-1, 1]
-        o_t = tf.math.sigmoid(o_q)   # output gate [0, 1]
+        i_t = tf.math.sigmoid(i_q * self.gate_scale)   # input gate  [0, 1]
+        f_t = tf.math.sigmoid(f_q * self.gate_scale)   # forget gate [0, 1]
+        g_t = tf.math.tanh(g_q)                          # cell gate   [-1, 1] (inchange)
+        o_t = tf.math.sigmoid(o_q * self.gate_scale)   # output gate [0, 1]
 
         # Mise à jour cellule LSTM
         c_t = f_t * c_prev + i_t * g_t
@@ -264,6 +267,7 @@ class QLSTMCell(tf.keras.layers.Layer):
             "n_qubits":     self.n_qubits,
             "n_vqc_layers": self.n_vqc_layers,
             "n_features":   self.n_features,
+            "gate_scale":   self.gate_scale,
         })
         return cfg
 
@@ -448,6 +452,7 @@ def build_model(input_shape, num_classes, params):
     dropout_rate   = params.get("dropout_rate", 0.3)
     l2_strength    = params.get("l2_reg", 0.0)
     lr             = params["learning_rate"]
+    gate_scale     = params.get("gate_scale", 1.0)
     reg            = l2(l2_strength) if l2_strength > 0 else None
 
     window_size, n_features = input_shape
@@ -458,7 +463,7 @@ def build_model(input_shape, num_classes, params):
         # La 2ème cellule reçoit h_t (n_qubits) de la 1ère comme entrée
         n_in       = n_features if layer_idx == 0 else n_qubits
         return_seq = (layer_idx < n_qlstm_layers - 1)
-        cell = QLSTMCell(n_qubits, n_vqc_layers, n_in, name=f"qlstm_cell_{layer_idx}")
+        cell = QLSTMCell(n_qubits, n_vqc_layers, n_in, gate_scale=gate_scale, name=f"qlstm_cell_{layer_idx}")
         x = tf.keras.layers.RNN(cell, return_sequences=return_seq,
                                 name=f"qlstm_{layer_idx}")(x)
 
@@ -560,6 +565,10 @@ def optimize_hyperparams(df, num_classes):
     for (val_part, val_sess) in val_sessions:
         df_train = df[~((df[COL_PARTICIPANT] == val_part) & (df[COL_SESSION] == val_sess))].copy()
         df_val   = df[ (df[COL_PARTICIPANT] == val_part)  & (df[COL_SESSION] == val_sess)].copy()
+
+        # SMOTE seulement sur df_train, avant le scaling
+        df_train = resample_dataframe(df_train, SIGNAL_COLS)
+
         scaler   = RobustScaler()
         df_train[SIGNAL_COLS] = scaler.fit_transform(df_train[SIGNAL_COLS])
         df_val[SIGNAL_COLS]   = scaler.transform(df_val[SIGNAL_COLS])
@@ -592,17 +601,20 @@ def optimize_hyperparams(df, num_classes):
 def train_global_model(df, best_params, num_classes, val_sessions):
     print("\n" + "=" * 60 + f"\nMODÈLE GLOBAL — {MODEL_NAME}\n" + "=" * 60)
 
-    df_all = df.copy()
-    scaler = RobustScaler()
-    df_all[SIGNAL_COLS] = scaler.fit_transform(df_all[SIGNAL_COLS])
-
-    y_all = get_window_labels(df_all, QLSTM_WINDOW_SIZE, QLSTM_STEP_SIZE)
-    w     = compute_class_weight("balanced", classes=np.unique(y_all), y=y_all)
-
     val_sessions_set = set(val_sessions)
-    mask_val  = df_all.set_index([COL_PARTICIPANT, COL_SESSION]).index.isin(val_sessions_set)
-    df_train  = df_all[~mask_val].copy()
-    df_val    = df_all[mask_val].copy()
+    mask_val  = df.set_index([COL_PARTICIPANT, COL_SESSION]).index.isin(val_sessions_set)
+    df_train  = df[~mask_val].copy()
+    df_val    = df[mask_val].copy()
+
+    # SMOTE seulement sur df_train, avant le scaling
+    df_train = resample_dataframe(df_train, SIGNAL_COLS)
+
+    scaler = RobustScaler()
+    df_train[SIGNAL_COLS] = scaler.fit_transform(df_train[SIGNAL_COLS])
+    df_val[SIGNAL_COLS]   = scaler.transform(df_val[SIGNAL_COLS])
+
+    y_train_labels = get_window_labels(df_train, QLSTM_WINDOW_SIZE, QLSTM_STEP_SIZE)
+    w = compute_class_weight("balanced", classes=np.unique(y_train_labels), y=y_train_labels)
 
     bs = best_params.get("batch_size", 16)
     ds_train, st_train = create_tf_dataset(df_train, QLSTM_WINDOW_SIZE, QLSTM_STEP_SIZE, bs, num_classes)
@@ -621,19 +633,58 @@ def train_global_model(df, best_params, num_classes, val_sessions):
             validation_data=ds_val,
             steps_per_epoch=st_train, validation_steps=st_val,
             shuffle=False, callbacks=callbacks,
-            class_weight=dict(enumerate(w)), verbose=1,
+            class_weight=dict(zip(np.unique(y_train_labels), w)), verbose=1,
         )
-        print(
-            f"  ⚠ {MODEL_NAME} : export global STM32 (.tflite/.h) non implémenté pour QLSTM. "
-            "Utilisez CNN-1D, TCN, LSTM ou Distillation Student pour l'embarqué."
-        )
+
+        models_dir = MODELS_DIR / "QLSTM"
+        models_dir.mkdir(parents=True, exist_ok=True)
+        keras_path = models_dir / f"{MODEL_NAME}_global.keras"
+        model.save(keras_path)
+        print(f"  Modele natif sauvegarde : {keras_path}")
+
+        if ds_val is not None:
+            ds_val_pred, _ = create_predict_dataset(
+                df_val, QLSTM_WINDOW_SIZE, QLSTM_STEP_SIZE, bs, num_classes
+            )
+            y_pred_val = np.argmax(model.predict(ds_val_pred, verbose=0), axis=1)
+            y_true_val = get_window_labels(df_val, QLSTM_WINDOW_SIZE, QLSTM_STEP_SIZE)
+            edge_metrics = {
+                "native_qlstm": {
+                    "f1_macro": float(f1_score(y_true_val, y_pred_val, average="macro", zero_division=0)),
+                    "balanced_accuracy": float(balanced_accuracy_score(y_true_val, y_pred_val)),
+                    "model_size_kb": round(keras_path.stat().st_size / 1024, 2),
+                    "deployment_status": (
+                        "export_stm32_non_tente : cellule VQC (PennyLane lightning.qubit, "
+                        "boucle Python native par timestep via tf.map_fn en mode eager) "
+                        "structurellement differente de fixed_layer_matrix (QRC) -- pas de "
+                        "simplification equivalente identifiee a ce stade. A investiguer "
+                        "separement si un export est souhaite, pas suppose impossible."
+                    ),
+                }
+            }
+            curr_metrics = {}
+            if METRICS_PATH.exists():
+                try:
+                    with open(METRICS_PATH, "r") as f:
+                        content = f.read().strip()
+                    curr_metrics = json.loads(content) if content else {}
+                except (json.JSONDecodeError, ValueError):
+                    curr_metrics = {}
+            curr_metrics.setdefault(MODEL_NAME, {})
+            curr_metrics[MODEL_NAME]["edge_comparison"] = edge_metrics
+            with open(METRICS_PATH, "w") as f:
+                json.dump(curr_metrics, f, indent=4)
+            print(f"  Comparaison edge sauvegardee : {METRICS_PATH}")
+            del ds_val_pred
+        else:
+            print("  Pas de ds_val disponible, edge_comparison non calculee.")
     except Exception as exc:
         print(f"  Modèle global échoué ({type(exc).__name__}: {exc})")
     finally:
         _free_memory(model)
         if "ds_train" in locals(): del ds_train
         if "ds_val"   in locals(): del ds_val
-        del df_all, df_train, df_val
+        del df_train, df_val
         gc.collect()
 
 
@@ -648,7 +699,10 @@ def main():
         return print(f"Dataset non trouvé : {DATA_MODEL_READY}")
 
     df = pd.read_csv(DATA_MODEL_READY)
-    df[COL_LABEL] = df[COL_LABEL].map(LABEL_MAPPING)
+    df[COL_LABEL] = pd.to_numeric(df[COL_LABEL], errors="coerce").fillna(-1).astype(int)
+    n_unlabeled = int((df[COL_LABEL] == -1).sum())
+    df = df[df[COL_LABEL] >= 0].copy()
+    print(f"Labeled: {len(df)} lignes | Unlabeled exclues: {n_unlabeled} lignes")
 
     unique_sessions = [
         tuple(x) for x in
@@ -682,6 +736,9 @@ def main():
         df_fit = df_pool[~((df_pool[COL_PARTICIPANT] == val_part) & (df_pool[COL_SESSION] == val_sess))].copy()
         df_val = df_pool[ (df_pool[COL_PARTICIPANT] == val_part)  & (df_pool[COL_SESSION] == val_sess)].copy()
 
+        # SMOTE seulement sur df_fit, avant le scaling
+        df_fit = resample_dataframe(df_fit, SIGNAL_COLS)
+
         scaler = RobustScaler()
         df_fit[SIGNAL_COLS]  = scaler.fit_transform(df_fit[SIGNAL_COLS])
         df_val[SIGNAL_COLS]  = scaler.transform(df_val[SIGNAL_COLS])
@@ -714,7 +771,7 @@ def main():
                     EarlyStopping(monitor="val_loss", patience=5, restore_best_weights=True),
                     TerminateOnNaN(),
                 ],
-                class_weight=dict(enumerate(w)),
+                class_weight=dict(zip(np.unique(y_fitLabels), w)),
                 verbose=1,
             )
 
