@@ -1,0 +1,163 @@
+ST Edge AI Core v4.0.0-20500 359356bb0
+Created date          : 2026-08-23 17:25:11
+Parameters            : analyze --target stm32h7 --model /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/models_saved/LGBM/LGBM_global.onnx --output /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/edge_reports/LGBM
+
+Exec/report summary (analyze)
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+model file         :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/models_saved/LGBM/LGBM_global.onnx   
+type               :   onnx                                                                                                                              
+c_name             :   network                                                                                                                           
+compression        :   lossless                                                                                                                          
+options            :   allocate-inputs, allocate-outputs, use-lite-runtime, use-st-ai                                                                    
+optimization       :   balanced                                                                                                                          
+target/series      :   stm32h7                                                                                                                           
+workspace dir      :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/st_ai_ws                             
+output dir         :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/edge_reports/LGBM                    
+model_fmt          :   undefined                                                                                                                         
+model_name         :   LGBM_global                                                                                                                       
+model_hash         :   0x1b1b114e018552140c17cb96c6d513d0                                                                                                
+params #           :   20,707 items (47.53 KiB)                                                                                                          
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+input 1/1          :   'float_input', f32(1x135), 540 Bytes, activations                                                                                 
+output 1/2         :   'label_tensor0', int32(1), 4 Bytes, activations                                                                                   
+output 2/2         :   'probabilities', f32(1x1x4x2), 32 Bytes, activations                                                                              
+outputs (total)    :   36 Bytes                                                                                                                          
+macc               :   1,499                                                                                                                             
+weights (ro)       :   37,644 B (36.76 KiB) (1 segment) / -45,184(-54.6%) vs float model                                                                 
+activations (rw)   :   560 B (560 B) (1 segment) *                                                                                                       
+ram (total)        :   560 B (560 B) = 560 + 0 + 0                                                                                                       
+---------------------------------------------------------------------------------------------------------------------------------------------------------
+(*) 'input'/'output' buffers are allocated in the activations buffer
+
+Model name - LGBM_global
+------ --------------------------------------------------------------- ------------------- --------------- ------- -------------- --- ----------------- ------------- ------------------------------- 
+m_id   layer (type,original)                                           oshape              param/size         macc   connected to   | c_size            c_macc        c_type                          
+------ --------------------------------------------------------------- ------------------- --------------- ------- -------------- --- ----------------- ------------- ------------------------------- 
+0      float_input (Input, )                                           [b:1,c:135]                                                  |                                 
+------ --------------------------------------------------------------- ------------------- --------------- ------- -------------- --- ----------------- ------------- ------------------------------- 
+1      label_tensor (TreeEnsembleClassifier, TreeEnsembleClassifier)   [b:1][b:1,c:4]      20,703/48,666     1,499    float_input   | -11,038(-22.7%)                 TreeEnsembleClassifier_[o][0]   
+------ --------------------------------------------------------------- ------------------- --------------- ------- -------------- --- ----------------- ------------- ------------------------------- 
+4      label (Cast, Cast)                                              [b:1]                                     2   label_tensor   |                   -2(-100.0%)   
+------ --------------------------------------------------------------- ------------------- --------------- ------- -------------- --- ----------------- ------------- ------------------------------- 
+5      probabilities (ZipMap, ZipMap)                                  [b:1,h:1,w:4,c:2]   4/4                       label_tensor   |                                 ZipMap_[o][1]                   
+------ --------------------------------------------------------------- ------------------- --------------- ------- -------------- --- ----------------- ------------- ------------------------------- 
+model/c-model: macc=1,501/1,499 -2(-0.1%) weights=48,670/37,644 -11,026(-22.7%) activations=--/560 io=--/0
+
+
+
+Generated C-graph summary
+------------------------------------------------------------------------------------------------------------------------
+model name            : LGBM_global
+c-name                : network
+c-node #              : 2
+c-array #             : 17
+activations size      : 560 (1 segment)
+weights size          : 37644 (1 segment)
+macc                  : 1499
+inputs                : ['float_input_output']
+outputs               : ['label_tensor_output0', 'probabilities_output']
+
+C-Arrays (17)
+------ ------------------------------------ ------------ ------------------------- ------------- --------- 
+c_id   name (*_array)                       item/size    domain/mem-pool           c-type        comment   
+------ ------------------------------------ ------------ ------------------------- ------------- --------- 
+0      float_input_output                   135/540      activations/**default**   float         /input    
+1      label_tensor_base_values             4/16         weights/weights           const float             
+2      label_tensor_branch_mode             172/172      weights/weights           const u8                
+3      label_tensor_class_ids               1897/1897    weights/weights           const u8                
+4      label_tensor_class_nodeids           1897/1897    weights/weights           const u8                
+5      label_tensor_class_weights           1897/7588    weights/weights           const float             
+6      label_tensor_classlabels_int64s      4/16         weights/weights           const s32               
+7      label_tensor_nb_class_by_estimator   172/344      weights/weights           const u16               
+8      label_tensor_nb_node_by_estimator    172/344      weights/weights           const u16               
+9      label_tensor_nodes_falsenodeids      3622/3622    weights/weights           const u8                
+10     label_tensor_nodes_featureids        3622/3622    weights/weights           const u8                
+11     label_tensor_nodes_truenodeids       3622/3622    weights/weights           const u8                
+12     label_tensor_nodes_values            3622/14488   weights/weights           const float             
+13     label_tensor_output0                 1.0/4        activations/**default**   s32           /output   
+14     label_tensor_output1                 4/16         activations/**default**   float                   
+15     probabilities_classlabels_ints       4/4          weights/weights           const u8                
+16     probabilities_output                 8/32         activations/**default**   float         /output   
+------ ------------------------------------ ------------ ------------------------- ------------- --------- 
+
+C-Layers (2)
+------ ---------------- ---- ------------------------- ------ ------- --------------------------------------- ------------------- 
+c_id   name (*_layer)   id   layer_type                macc   rom     tensors                                 shape (array id)    
+------ ---------------- ---- ------------------------- ------ ------- --------------------------------------- ------------------- 
+0      label_tensor     1    TreeEnsembleClassifier    1499   37628   I: float_input_output                   f32(1x135) (0)      
+                                                                      W: label_tensor_branch_mode             uint8(172) (2)      
+                                                                      W: label_tensor_nodes_featureids        uint8(3622) (10)    
+                                                                      W: label_tensor_nodes_values            f32(3622) (12)      
+                                                                      W: label_tensor_nodes_truenodeids       uint8(3622) (11)    
+                                                                      W: label_tensor_nodes_falsenodeids      uint8(3622) (9)     
+                                                                      W: label_tensor_class_weights           f32(1897) (5)       
+                                                                      W: label_tensor_nb_node_by_estimator    uint16(172) (8)     
+                                                                      W: label_tensor_class_nodeids           uint8(1897) (4)     
+                                                                      W: label_tensor_nb_class_by_estimator   uint16(172) (7)     
+                                                                      W: label_tensor_classlabels_int64s      int32(4) (6)        
+                                                                      W: label_tensor_base_values             f32(4) (1)          
+                                                                      W: label_tensor_class_ids               uint8(1897) (3)     
+                                                                      O: label_tensor_output0                 int32(1) (13)       
+                                                                      O: label_tensor_output1                 f32(1x4) (14)       
+------ ---------------- ---- ------------------------- ------ ------- --------------------------------------- ------------------- 
+1      probabilities    5    ZipMap                    0      4       I: label_tensor_output1                 f32(1x4) (14)       
+                                                                      W: probabilities_classlabels_ints       uint8(4) (15)       
+                                                                      O: probabilities_output                 f32(1x1x4x2) (16)   
+------ ---------------- ---- ------------------------- ------ ------- --------------------------------------- ------------------- 
+
+
+
+Number of operations per c-layer
+------- ------ ---------------------------------------- ------- ------------- 
+c_id    m_id   name (type)                                  #op          type 
+------- ------ ---------------------------------------- ------- ------------- 
+0       1      label_tensor (TreeEnsembleClassifier)      1,499   smul_f32_s8 
+1       5      probabilities (ZipMap)                         0   smul_f32_s8 
+------- ------ ---------------------------------------- ------- ------------- 
+total                                                     1,499 
+
+Number of operation types
+---------------- ------- ----------- 
+operation type         #           % 
+---------------- ------- ----------- 
+smul_f32_s8        1,499      100.0% 
+
+Complexity report (model)
+------ --------------- ------------------------- ------------------------- ------ 
+m_id   name            c_macc                    c_rom                     c_id   
+------ --------------- ------------------------- ------------------------- ------ 
+1      label_tensor    |||||||||||||||| 100.0%   |||||||||||||||| 100.0%   [0]    
+5      probabilities   |                  0.0%   |                  0.0%   [1]    
+------ --------------- ------------------------- ------------------------- ------ 
+macc=1,499 weights=37,644 act=560 ram_io=0
+ 
+ Requested memory size by section - "stm32h7" target
+ ------------------------------ ------- -------- ------- ----- 
+ module                            text   rodata    data   bss 
+ ------------------------------ ------- -------- ------- ----- 
+ NetworkRuntime1200_CM7_GCC.a     2,384        0       0     0 
+ network.o                        1,104       72   1,544     8 
+ lib (toolchain)*                   380      328       0     0 
+ ------------------------------ ------- -------- ------- ----- 
+ RT total**                       3,868      400   1,544     8 
+ ------------------------------ ------- -------- ------- ----- 
+ weights                              0   37,648       0     0 
+ activations                          0        0       0   560 
+ states                               0        0       0     0 
+ io                                   0        0       0     0 
+ ------------------------------ ------- -------- ------- ----- 
+ TOTAL                            3,868   38,048   1,544   568 
+ ------------------------------ ------- -------- ------- ----- 
+ *  toolchain objects (libm/libgcc*)
+ ** RT AI runtime objects (kernels+infrastructure)
+  
+  Summary - "stm32h7" target
+  ---------------------------------------------------
+               FLASH (ro)      %*   RAM (rw)       % 
+  ---------------------------------------------------
+  RT total          5,812   13.4%      1,552   73.5% 
+  ---------------------------------------------------
+  TOTAL            43,460              2,112         
+  ---------------------------------------------------
+  *  rt/total
+

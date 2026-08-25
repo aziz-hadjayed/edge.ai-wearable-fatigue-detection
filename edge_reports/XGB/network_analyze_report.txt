@@ -1,0 +1,151 @@
+ST Edge AI Core v4.0.0-20500 359356bb0
+Created date          : 2026-08-23 18:39:17
+Parameters            : analyze --target stm32h7 --model /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/models_saved/XGB/XGB_global.onnx --output /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/edge_reports/XGB
+
+Exec/report summary (analyze)
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+model file         :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/models_saved/XGB/XGB_global.onnx   
+type               :   onnx                                                                                                                            
+c_name             :   network                                                                                                                         
+compression        :   lossless                                                                                                                        
+options            :   allocate-inputs, allocate-outputs, use-lite-runtime, use-st-ai                                                                  
+optimization       :   balanced                                                                                                                        
+target/series      :   stm32h7                                                                                                                         
+workspace dir      :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/st_ai_ws                           
+output dir         :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/edge_reports/XGB                   
+model_fmt          :   undefined                                                                                                                       
+model_name         :   XGB_global                                                                                                                      
+model_hash         :   0xd5b2d37422817a37315b310e79d97a00                                                                                              
+params #           :   34,948 items (80.34 KiB)                                                                                                        
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+input 1/1          :   'float_input', f32(1x135), 540 Bytes, activations                                                                               
+output 1/2         :   'label0', int32(1), 4 Bytes, activations                                                                                        
+output 2/2         :   'label1', f32(1x4), 16 Bytes, activations                                                                                       
+outputs (total)    :   20 Bytes                                                                                                                        
+macc               :   1,978                                                                                                                           
+weights (ro)       :   63,520 B (62.03 KiB) (1 segment) / -76,272(-54.6%) vs float model                                                               
+activations (rw)   :   560 B (560 B) (1 segment) *                                                                                                     
+ram (total)        :   560 B (560 B) = 560 + 0 + 0                                                                                                     
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+(*) 'input'/'output' buffers are allocated in the activations buffer
+
+Model name - XGB_global
+------ -------------------------------------------------------- ---------------- --------------- ------- -------------- --- ----------------- -------- ---------------------------------- 
+m_id   layer (type,original)                                    oshape           param/size         macc   connected to   | c_size            c_macc   c_type                             
+------ -------------------------------------------------------- ---------------- --------------- ------- -------------- --- ----------------- -------- ---------------------------------- 
+0      float_input (Input, )                                    [b:1,c:135]                                               |                            
+------ -------------------------------------------------------- ---------------- --------------- ------- -------------- --- ----------------- -------- ---------------------------------- 
+1      label (TreeEnsembleClassifier, TreeEnsembleClassifier)   [b:1][b:1,c:4]   34,948/82,264     1,978    float_input   | -18,744(-22.8%)            TreeEnsembleClassifier_[o][o][0]   
+------ -------------------------------------------------------- ---------------- --------------- ------- -------------- --- ----------------- -------- ---------------------------------- 
+model/c-model: macc=1,978/1,978  weights=82,264/63,520 -18,744(-22.8%) activations=--/560 io=--/0
+
+
+
+Generated C-graph summary
+------------------------------------------------------------------------------------------------------------------------
+model name            : XGB_global
+c-name                : network
+c-node #              : 1
+c-array #             : 15
+activations size      : 560 (1 segment)
+weights size          : 63520 (1 segment)
+macc                  : 1978
+inputs                : ['float_input_output']
+outputs               : ['label_output0', 'label_output1']
+
+C-Arrays (15)
+------ ----------------------------- ------------ ------------------------- ------------- --------- 
+c_id   name (*_array)                item/size    domain/mem-pool           c-type        comment   
+------ ----------------------------- ------------ ------------------------- ------------- --------- 
+0      float_input_output            135/540      activations/**default**   float         /input    
+1      label_base_values             4/16         weights/weights           const float             
+2      label_branch_mode             216/216      weights/weights           const u8                
+3      label_class_ids               3196/3196    weights/weights           const u8                
+4      label_class_nodeids           3196/3196    weights/weights           const u8                
+5      label_class_weights           3196/12784   weights/weights           const float             
+6      label_classlabels_int64s      4/16         weights/weights           const s32               
+7      label_nb_class_by_estimator   216/432      weights/weights           const u16               
+8      label_nb_node_by_estimator    216/432      weights/weights           const u16               
+9      label_nodes_falsenodeids      6176/6176    weights/weights           const u8                
+10     label_nodes_featureids        6176/6176    weights/weights           const u8                
+11     label_nodes_truenodeids       6176/6176    weights/weights           const u8                
+12     label_nodes_values            6176/24704   weights/weights           const float             
+13     label_output0                 1.0/4        activations/**default**   s32           /output   
+14     label_output1                 4/16         activations/**default**   float         /output   
+------ ----------------------------- ------------ ------------------------- ------------- --------- 
+
+C-Layers (1)
+------ ---------------- ---- ------------------------- ------ ------- -------------------------------- ------------------ 
+c_id   name (*_layer)   id   layer_type                macc   rom     tensors                          shape (array id)   
+------ ---------------- ---- ------------------------- ------ ------- -------------------------------- ------------------ 
+0      label            1    TreeEnsembleClassifier    1978   63520   I: float_input_output            f32(1x135) (0)     
+                                                                      W: label_branch_mode             uint8(216) (2)     
+                                                                      W: label_nodes_featureids        uint8(6176) (10)   
+                                                                      W: label_nodes_values            f32(6176) (12)     
+                                                                      W: label_nodes_truenodeids       uint8(6176) (11)   
+                                                                      W: label_nodes_falsenodeids      uint8(6176) (9)    
+                                                                      W: label_class_weights           f32(3196) (5)      
+                                                                      W: label_nb_node_by_estimator    uint16(216) (8)    
+                                                                      W: label_class_nodeids           uint8(3196) (4)    
+                                                                      W: label_nb_class_by_estimator   uint16(216) (7)    
+                                                                      W: label_classlabels_int64s      int32(4) (6)       
+                                                                      W: label_base_values             f32(4) (1)         
+                                                                      W: label_class_ids               uint8(3196) (3)    
+                                                                      O: label_output0                 int32(1) (13)      
+                                                                      O: label_output1                 f32(1x4) (14)      
+------ ---------------- ---- ------------------------- ------ ------- -------------------------------- ------------------ 
+
+
+
+Number of operations per c-layer
+------- ------ --------------------------------- ------- ------------- 
+c_id    m_id   name (type)                           #op          type 
+------- ------ --------------------------------- ------- ------------- 
+0       1      label (TreeEnsembleClassifier)      1,978   smul_f32_s8 
+------- ------ --------------------------------- ------- ------------- 
+total                                              1,978 
+
+Number of operation types
+---------------- ------- ----------- 
+operation type         #           % 
+---------------- ------- ----------- 
+smul_f32_s8        1,978      100.0% 
+
+Complexity report (model)
+------ ------- ------------------------- ------------------------- ------ 
+m_id   name    c_macc                    c_rom                     c_id   
+------ ------- ------------------------- ------------------------- ------ 
+1      label   |||||||||||||||| 100.0%   |||||||||||||||| 100.0%   [0]    
+------ ------- ------------------------- ------------------------- ------ 
+macc=1,978 weights=63,520 act=560 ram_io=0
+ 
+ Requested memory size by section - "stm32h7" target
+ ------------------------------ ------- -------- ------- ----- 
+ module                            text   rodata    data   bss 
+ ------------------------------ ------- -------- ------- ----- 
+ NetworkRuntime1200_CM7_GCC.a     1,600        0       0     0 
+ network.o                          964       64   1,300     4 
+ lib (toolchain)*                   380      328       0     0 
+ ------------------------------ ------- -------- ------- ----- 
+ RT total**                       2,944      392   1,300     4 
+ ------------------------------ ------- -------- ------- ----- 
+ weights                              0   63,520       0     0 
+ activations                          0        0       0   560 
+ states                               0        0       0     0 
+ io                                   0        0       0     0 
+ ------------------------------ ------- -------- ------- ----- 
+ TOTAL                            2,944   63,912   1,300   564 
+ ------------------------------ ------- -------- ------- ----- 
+ *  toolchain objects (libm/libgcc*)
+ ** RT AI runtime objects (kernels+infrastructure)
+  
+  Summary - "stm32h7" target
+  --------------------------------------------------
+               FLASH (ro)     %*   RAM (rw)       % 
+  --------------------------------------------------
+  RT total          4,636   6.8%      1,304   70.0% 
+  --------------------------------------------------
+  TOTAL            68,156             1,864         
+  --------------------------------------------------
+  *  rt/total
+

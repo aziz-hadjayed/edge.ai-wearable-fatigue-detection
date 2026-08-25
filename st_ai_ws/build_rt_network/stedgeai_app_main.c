@@ -37,6 +37,7 @@ static uint8_t activations_1[STAI_NETWORK_ACTIVATION_1_SIZE_BYTES];
 
 /* Array to store the data of the output tensors */
 /* -> data_out_1 is allocated in activations buffer */
+/* -> data_out_2 is allocated in activations buffer */
 
 static stai_ptr m_inputs[STAI_NETWORK_IN_NUM];
 static stai_ptr m_outputs[STAI_NETWORK_OUT_NUM];

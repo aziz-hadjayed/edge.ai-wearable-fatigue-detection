@@ -33,6 +33,8 @@ OPTUNA_PATH_ESN_RLS = OPTUNA / "optuna_esn_rls_results.json"
 OPTUNA_PATH_MESN = OPTUNA / "optuna_mesn_results.json"
 OPTUNA_PATH_QRC = OPTUNA / "optuna_qrc_results.json"
 OPTUNA_PATH_QLSTM = OPTUNA / "optuna_qlstm_results.json"
+OPTUNA_PATH_QNN = OPTUNA / "optuna_qnn_results.json"
+OPTUNA_PATH_QKERNEL = OPTUNA / "optuna_qkernel_results.json"
 OPTUNA_PATH_DISTILL_STUDENT = OPTUNA / "optuna_distill_student_results.json"
 OPTUNA_PATH_DISTILL_TEACHER = OPTUNA / "optuna_distill_teacher_results.json"
 
@@ -103,8 +105,8 @@ LABEL_MAP = {"baseline": 0, "activity": 1, "pre_fatigue": 2, "fatigue": 3}
 # ══════════════════════════════════════════════════════════════════════
 # 4. HARDWARE STM32 (budget Flash pour TFLite INT8)
 # ══════════════════════════════════════════════════════════════════════
-STM32_FLASH_KB = 512  # budget conservateur : 2048 KB total - ~1000 KB firmware
-STM32_RAM_KB = 1433  # STM32H7A3ZIT6Q
+STM32_FLASH_KB = 512  # budget conservateur : 2048 KB total 
+STM32_RAM_KB = 1376  # STM32H7A3ZIT6Q
 
 # ══════════════════════════════════════════════════════════════════════
 # 5. OPTUNA — FLAGS & CHEMINS DE RÉSULTATS
@@ -120,13 +122,13 @@ USE_OPTUNA_XGB = True
 
 USE_OPTUNA_QRC = True
 USE_OPTUNA_QLSTM = True
+USE_OPTUNA_QNN = False
+USE_OPTUNA_QKERNEL = True
 
 USE_OPTUNA_ESN = True
 USE_OPTUNA_ESN_RLS = True
 USE_OPTUNA_MESN = True
 
-USE_OPTUNA_DISTILL_STUDENT = True
-USE_OPTUNA_DISTILL_TEACHER = True
 # ══════════════════════════════════════════════════════════════════════
 CNN_D1_OPTUNA_TRIALS = 70
 CNN_D1_OPTUNA_SESSIONS = 30       
@@ -142,6 +144,14 @@ QRC_OPTUNA_SESSIONS = 12
 
 QLSTM_OPTUNA_TRIALS = 20
 QLSTM_OPTUNA_SESSIONS = 5
+
+QNN_OPTUNA_TRIALS = 40
+QNN_OPTUNA_SESSIONS = 10
+QNN_OPTUNA_EPOCHS = 15  # VQC evalue UNE FOIS par fenetre (pas de RNN) -> plus rapide que QLSTM
+LOSO_EPOCHS_QNN = 100
+
+QKERNEL_OPTUNA_TRIALS = 100
+QKERNEL_OPTUNA_SESSIONS = 20
 
 
 
@@ -295,6 +305,22 @@ QRC_OPTUNA_SPACE = {
     "ridge_alpha": {"low": 1e-3, "high": 50.0, "log": True},
     "temporal_stride": [4, 6, 8, 12],  # ← Retiré 2 (trop lent, 96 pas)
     "state_summary": ["last_mean", "last_mean_std"],
+}
+
+QNN_OPTUNA_SPACE = {
+    "n_qubits": [4, 5, 6, 7, 8],
+    "n_vqc_layers": [1, 2, 3],
+    "dense_units": [32, 64, 128],
+    "dropout_rate": {"low": 0.1, "high": 0.5},
+    "l2_reg": {"low": 1e-6, "high": 1e-2, "log": True},
+    "learning_rate": {"low": 1e-4, "high": 1e-2, "log": True},
+    "batch_size": [16, 32],
+}
+
+QKERNEL_OPTUNA_SPACE = {
+    "n_qubits": [4, 5, 6, 7, 8, 9, 10],
+    "input_scaling": {"low": 0.001, "high": 1.0, "log": True},
+    "svm_C": {"low": 0.001, "high": 30.0, "log": True},
 }
 
 #----------------------------------------------------------------------------------------------------------------------------
@@ -466,6 +492,21 @@ MODEL_PARAMS = {
         "l2_reg": 1e-5,
         "learning_rate": 1e-3,
         "batch_size": 16,
+    },
+    "QNN": {
+        "n_qubits": 6,
+        "n_vqc_layers": 2,
+        "dense_units": 32,
+        "dropout_rate": 0.34851616147340775,
+        "l2_reg": 3.378104721677979e-06,
+        "learning_rate": 0.0059619848416953836,
+        "batch_size": 32,
+    },
+    "QKERNEL": {
+        "n_qubits": 6,
+        "input_scaling": 0.5,
+        "svm_C": 1.0,
+        "random_state": 42,
     },
     "ESN": {
         "n_reservoir": 200,

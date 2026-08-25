@@ -3803,6 +3803,558 @@
                 "model_size_kb": 271.37
             }
         }
-    }
+    },
+    "QKERNEL": {
+        "mean_f1": 0.4049396248080613,
+        "std_f1": 0.21764020252807717,
+        "mean_bal_acc": 0.46828822162768247,
+        "std_bal_acc": 0.19942491049777714,
+        "params": {
+            "n_qubits": 8,
+            "input_scaling": 0.41132798634042195,
+            "svm_C": 3.413257877871724,
+            "random_state": 42
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.17878787878787877,
+                "Balanced_Accuracy": 0.2583333333333333
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.26655348047538197,
+                "Balanced_Accuracy": 0.3611111111111111
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 0.467670011148272,
+                "Balanced_Accuracy": 0.5729166666666667
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.15833333333333333,
+                "Balanced_Accuracy": 0.16666666666666666
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 0.16964285714285715,
+                "Balanced_Accuracy": 0.2916666666666667
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.4024327122153209,
+                "Balanced_Accuracy": 0.3630952380952381
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.4871794871794871,
+                "Balanced_Accuracy": 0.5616071428571429
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 0.6385281385281385,
+                "Balanced_Accuracy": 0.6428571428571429
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.6714743589743589,
+                "Balanced_Accuracy": 0.7083333333333333
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.3686868686868687,
+                "Balanced_Accuracy": 0.4375
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.4120044255946893,
+                "Balanced_Accuracy": 0.4513305322128851
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.5303030303030303,
+                "Balanced_Accuracy": 0.5833333333333334
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.08193979933110368,
+                "Balanced_Accuracy": 0.10714285714285714
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.6370766488413547,
+                "Balanced_Accuracy": 0.6547619047619048
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.2264957264957265,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.86133069828722,
+                "Balanced_Accuracy": 0.8511904761904763
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 0.6221139971139971,
+                "Balanced_Accuracy": 0.6895833333333334
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 0.6868315508021391,
+                "Balanced_Accuracy": 0.7083333333333334
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.6098039215686274,
+                "Balanced_Accuracy": 0.6696428571428571
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.16984126984126985,
+                "Balanced_Accuracy": 0.28125
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.11490683229813664,
+                "Balanced_Accuracy": 0.1588235294117647
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.5952380952380952,
+                "Balanced_Accuracy": 0.6726190476190477
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.34705882352941175,
+                "Balanced_Accuracy": 0.5555555555555555
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.15833333333333333,
+                "Balanced_Accuracy": 0.2692307692307692
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.34134615384615385,
+                "Balanced_Accuracy": 0.4083333333333333
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.19618055555555555,
+                "Balanced_Accuracy": 0.28125
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.3522727272727273,
+                "Balanced_Accuracy": 0.45833333333333337
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 0.4158730158730159,
+                "Balanced_Accuracy": 0.4444444444444444
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.15789473684210525,
+                "Balanced_Accuracy": 0.25
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 0.9125874125874126,
+                "Balanced_Accuracy": 0.9166666666666667
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.19176136363636365,
+                "Balanced_Accuracy": 0.3044871794871795
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.4529137529137529,
+                "Balanced_Accuracy": 0.49404761904761907
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.27046783625730997,
+                "Balanced_Accuracy": 0.4166666666666667
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.296078431372549,
+                "Balanced_Accuracy": 0.3482142857142857
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.6469308469308469,
+                "Balanced_Accuracy": 0.694047619047619
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 0.48095238095238096,
+                "Balanced_Accuracy": 0.49166666666666664
+            }
+        ],
+        "edge_comparison": {
+            "native_qkernel": {
+                "f1_macro": 0.3286272866918028,
+                "balanced_accuracy": 0.334375,
+                "model_size_kb": 2554.74,
+                "deployment_status": "export_stm32_non_tente : necessiterait d'embarquer les etats quantiques de TOUS les vecteurs de support (potentiellement des centaines), structure differente des modeles a poids fixes deja exportes (QRC). Faisable en principe (encodage + produits scalaires + decision lineaire SVM, tous compatibles avec les operateurs stedgeai deja confirmes), mais non tente ici -- a explorer separement si les resultats F1 le justifient."
+            }
+        }
+    },
+    "QNN": {
+        "mean_f1": 0.26672651004341014,
+        "std_f1": 0.12413090691582555,
+        "mean_bal_acc": 0.34148995294828627,
+        "std_bal_acc": 0.12753211513202053,
+        "params": {
+            "n_qubits": 6,
+            "n_vqc_layers": 2,
+            "dense_units": 32,
+            "dropout_rate": 0.34851616147340775,
+            "l2_reg": 3.378104721677979e-06,
+            "learning_rate": 0.0059619848416953836,
+            "batch_size": 32
+        },
+        "folds": [
+            {
+                "Fold": 1,
+                "Participant": 1,
+                "Session": 1,
+                "F1_Macro": 0.15656565656565657,
+                "Balanced_Accuracy": 0.275
+            },
+            {
+                "Fold": 2,
+                "Participant": 1,
+                "Session": 2,
+                "F1_Macro": 0.019230769230769232,
+                "Balanced_Accuracy": 0.041666666666666664
+            },
+            {
+                "Fold": 3,
+                "Participant": 1,
+                "Session": 3,
+                "F1_Macro": 0.4777777777777778,
+                "Balanced_Accuracy": 0.5625
+            },
+            {
+                "Fold": 4,
+                "Participant": 2,
+                "Session": 1,
+                "F1_Macro": 0.238922367954626,
+                "Balanced_Accuracy": 0.29513888888888884
+            },
+            {
+                "Fold": 5,
+                "Participant": 2,
+                "Session": 2,
+                "F1_Macro": 0.1715686274509804,
+                "Balanced_Accuracy": 0.21875
+            },
+            {
+                "Fold": 6,
+                "Participant": 2,
+                "Session": 3,
+                "F1_Macro": 0.19404761904761902,
+                "Balanced_Accuracy": 0.2142857142857143
+            },
+            {
+                "Fold": 7,
+                "Participant": 3,
+                "Session": 1,
+                "F1_Macro": 0.21557971014492752,
+                "Balanced_Accuracy": 0.2916666666666667
+            },
+            {
+                "Fold": 8,
+                "Participant": 3,
+                "Session": 2,
+                "F1_Macro": 0.367453560371517,
+                "Balanced_Accuracy": 0.4642857142857143
+            },
+            {
+                "Fold": 9,
+                "Participant": 3,
+                "Session": 3,
+                "F1_Macro": 0.3928571428571428,
+                "Balanced_Accuracy": 0.3916666666666667
+            },
+            {
+                "Fold": 10,
+                "Participant": 4,
+                "Session": 1,
+                "F1_Macro": 0.25595238095238093,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 11,
+                "Participant": 4,
+                "Session": 2,
+                "F1_Macro": 0.2710597826086957,
+                "Balanced_Accuracy": 0.3651960784313726
+            },
+            {
+                "Fold": 12,
+                "Participant": 4,
+                "Session": 3,
+                "F1_Macro": 0.1,
+                "Balanced_Accuracy": 0.25
+            },
+            {
+                "Fold": 13,
+                "Participant": 5,
+                "Session": 1,
+                "F1_Macro": 0.15714285714285714,
+                "Balanced_Accuracy": 0.21428571428571427
+            },
+            {
+                "Fold": 14,
+                "Participant": 5,
+                "Session": 2,
+                "F1_Macro": 0.11755952380952381,
+                "Balanced_Accuracy": 0.16666666666666666
+            },
+            {
+                "Fold": 15,
+                "Participant": 5,
+                "Session": 3,
+                "F1_Macro": 0.325,
+                "Balanced_Accuracy": 0.41666666666666663
+            },
+            {
+                "Fold": 16,
+                "Participant": 6,
+                "Session": 1,
+                "F1_Macro": 0.39375,
+                "Balanced_Accuracy": 0.4297619047619048
+            },
+            {
+                "Fold": 17,
+                "Participant": 6,
+                "Session": 2,
+                "F1_Macro": 0.3605263157894737,
+                "Balanced_Accuracy": 0.5
+            },
+            {
+                "Fold": 18,
+                "Participant": 6,
+                "Session": 3,
+                "F1_Macro": 0.19407894736842105,
+                "Balanced_Accuracy": 0.25
+            },
+            {
+                "Fold": 19,
+                "Participant": 7,
+                "Session": 1,
+                "F1_Macro": 0.1875,
+                "Balanced_Accuracy": 0.2976190476190476
+            },
+            {
+                "Fold": 20,
+                "Participant": 7,
+                "Session": 2,
+                "F1_Macro": 0.2425,
+                "Balanced_Accuracy": 0.29166666666666663
+            },
+            {
+                "Fold": 21,
+                "Participant": 7,
+                "Session": 3,
+                "F1_Macro": 0.4833333333333333,
+                "Balanced_Accuracy": 0.569327731092437
+            },
+            {
+                "Fold": 22,
+                "Participant": 8,
+                "Session": 1,
+                "F1_Macro": 0.23097826086956522,
+                "Balanced_Accuracy": 0.23333333333333334
+            },
+            {
+                "Fold": 23,
+                "Participant": 8,
+                "Session": 2,
+                "F1_Macro": 0.17391304347826086,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 24,
+                "Participant": 8,
+                "Session": 3,
+                "F1_Macro": 0.3447884416924664,
+                "Balanced_Accuracy": 0.3717948717948718
+            },
+            {
+                "Fold": 25,
+                "Participant": 9,
+                "Session": 1,
+                "F1_Macro": 0.3994708994708994,
+                "Balanced_Accuracy": 0.42045454545454547
+            },
+            {
+                "Fold": 26,
+                "Participant": 9,
+                "Session": 2,
+                "F1_Macro": 0.2708333333333333,
+                "Balanced_Accuracy": 0.3333333333333333
+            },
+            {
+                "Fold": 27,
+                "Participant": 9,
+                "Session": 3,
+                "F1_Macro": 0.20512820512820512,
+                "Balanced_Accuracy": 0.2916666666666667
+            },
+            {
+                "Fold": 28,
+                "Participant": 10,
+                "Session": 1,
+                "F1_Macro": 0.37857142857142856,
+                "Balanced_Accuracy": 0.5
+            },
+            {
+                "Fold": 29,
+                "Participant": 10,
+                "Session": 2,
+                "F1_Macro": 0.3612040133779264,
+                "Balanced_Accuracy": 0.5
+            },
+            {
+                "Fold": 30,
+                "Participant": 10,
+                "Session": 3,
+                "F1_Macro": 0.5826648841354723,
+                "Balanced_Accuracy": 0.6666666666666667
+            },
+            {
+                "Fold": 31,
+                "Participant": 11,
+                "Session": 1,
+                "F1_Macro": 0.07142857142857142,
+                "Balanced_Accuracy": 0.25
+            },
+            {
+                "Fold": 32,
+                "Participant": 11,
+                "Session": 2,
+                "F1_Macro": 0.21904761904761905,
+                "Balanced_Accuracy": 0.27976190476190477
+            },
+            {
+                "Fold": 33,
+                "Participant": 11,
+                "Session": 3,
+                "F1_Macro": 0.11363636363636363,
+                "Balanced_Accuracy": 0.20833333333333334
+            },
+            {
+                "Fold": 34,
+                "Participant": 12,
+                "Session": 1,
+                "F1_Macro": 0.3133153396311291,
+                "Balanced_Accuracy": 0.3273809523809524
+            },
+            {
+                "Fold": 35,
+                "Participant": 12,
+                "Session": 2,
+                "F1_Macro": 0.3088235294117647,
+                "Balanced_Accuracy": 0.3214285714285714
+            },
+            {
+                "Fold": 36,
+                "Participant": 12,
+                "Session": 3,
+                "F1_Macro": 0.30594405594405594,
+                "Balanced_Accuracy": 0.4166666666666667
+            }
+        ],
+        "edge_comparison": {
+            "native_qnn": {
+                "f1_macro": 0.25136552933020967,
+                "balanced_accuracy": 0.27293794186959935,
+                "model_size_kb": 48.44,
+                "deployment_status": "export_stm32_non_tente : contrairement a QLSTM, ce VQC n'est evalue qu'UNE FOIS par fenetre (pas de recurrence), donc structurellement plus simple a exporter en principe (un seul appel de circuit a traduire, comme QRC, plutot que 4 VQC x window_size appels). Non tente dans cette premiere passe -- a explorer en priorite sur QNN plutot que QLSTM si les resultats F1 le justifient, precisement grace a cette simplicite structurelle."
+            }
+        }
+    
 }
 
+}

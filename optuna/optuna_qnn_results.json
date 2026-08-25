@@ -1,0 +1,12 @@
+{
+    "best_value": 0.5394758559518285,
+    "best_params": {
+        "n_qubits": 6,
+        "n_vqc_layers": 2,
+        "dense_units": 32,
+        "dropout_rate": 0.34851616147340775,
+        "l2_reg": 3.378104721677979e-06,
+        "learning_rate": 0.0059619848416953836,
+        "batch_size": 32
+    }
+}

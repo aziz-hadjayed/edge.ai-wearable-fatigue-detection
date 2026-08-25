@@ -1,0 +1,336 @@
+ST Edge AI Core v4.0.0-20500 359356bb0
+Created date          : 2026-08-23 17:15:47
+Parameters            : analyze --target stm32h7 --model /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/models_saved/CNN_1D_DISTILLED/CNN_1D_distilled_global_int8.tflite --output /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/edge_reports/CNN_1D_DISTILLED
+
+Exec/report summary (analyze)
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+model file         :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/models_saved/CNN_1D_DISTILLED/CNN_1D_distilled_global_int8.tflite   
+type               :   tflite                                                                                                                                                           
+c_name             :   network                                                                                                                                                          
+compression        :   lossless                                                                                                                                                         
+options            :   allocate-inputs, allocate-outputs, use-lite-runtime, use-st-ai                                                                                                   
+optimization       :   balanced                                                                                                                                                         
+target/series      :   stm32h7                                                                                                                                                          
+workspace dir      :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/st_ai_ws                                                            
+output dir         :   /media/mohamedaziz-hadjayed/D/aziz_data/fatigue_detection/edge-ai-wearable-fatigue-detection/edge_reports/CNN_1D_DISTILLED                                       
+model_fmt          :   ss/sa per channel                                                                                                                                                
+model_name         :   CNN_1D_distilled_global_int8                                                                                                                                     
+model_hash         :   0x03f827587c6af383cea7356231063a92                                                                                                                               
+params #           :   24,324 items (24.80 KiB)                                                                                                                                         
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+input 1/1          :   'keras_tensor', int8(1x240x27), 6.33 KBytes, QLinear(0.387313724,-62,int8), activations                                                                          
+output 1/1         :   'nl_27', int8(1x4), 4 Bytes, QLinear(0.003906250,-128,int8), activations                                                                                         
+macc               :   1,542,112                                                                                                                                                        
+weights (ro)       :   25,392 B (24.80 KiB) (1 segment) / -71,904(-73.9%) vs float model                                                                                                
+activations (rw)   :   20,140 B (19.67 KiB) (1 segment) *                                                                                                                               
+ram (total)        :   20,140 B (19.67 KiB) = 20,140 + 0 + 0                                                                                                                            
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+(*) 'input'/'output' buffers are allocated in the activations buffer
+
+Model name - CNN_1D_distilled_global_int8
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+m_id   layer (type,original)                      oshape                 param/size           macc          connected to   | c_size            c_macc            c_type                 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+0      keras_tensor (Input, )                     [b:1,h:240,c:27]                                                         |                                     
+       reshape_0 (Reshape, EXPAND_DIMS)           [b:1,h:1,w:240,c:27]                                      keras_tensor   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+1      conv2d_1 (Conv2D, CONV_2D)                 [b:1,h:1,w:236,c:32]   4,352/4,448     1,019,552             reshape_0   |                                     Conv2D_[0]             
+       nl_1_nl (Nonlinearity, CONV_2D)            [b:1,h:1,w:236,c:32]                       7,552              conv2d_1   |                   -7,552(-100.0%)   
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+2      tfl_pseudo_qconst13 (Placeholder, )        [b:32]                 32/32                                             |                   +7,552(+100.0%)   Eltwise/mul_[1]        
+       eltwise_2 (Eltwise, MUL)                   [b:1,h:1,w:236,c:32]                       7,552               nl_1_nl   |                   -7,552(-100.0%)   
+                                                                                                     tfl_pseudo_qconst13   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+3      tfl_pseudo_qconst12 (Placeholder, )        [b:32]                 32/32                                             |                   +7,552(+100.0%)   Eltwise/add_[2]        
+       eltwise_3 (Eltwise, ADD)                   [b:1,h:1,w:236,c:32]                       7,552             eltwise_2   |                   -7,552(-100.0%)   
+                                                                                                     tfl_pseudo_qconst12   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+4      reshape_4 (Reshape, RESHAPE)               [b:1,h:236,c:32]                                             eltwise_3   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+5      reshape_5 (Reshape, EXPAND_DIMS)           [b:1,h:1,w:236,c:32]                                         reshape_4   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+6      pool_6 (Pool, MAX_POOL_2D)                 [b:1,h:1,w:78,c:32]                        7,488             reshape_5   |                                     Pool_[3]               
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+7      reshape_7 (Reshape, RESHAPE)               [b:1,h:78,c:32]                                                 pool_6   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+8      reshape_8 (Reshape, EXPAND_DIMS)           [b:1,h:1,w:78,c:32]                                          reshape_7   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+9      conv2d_9 (Conv2D, CONV_2D)                 [b:1,h:1,w:74,c:32]    5,152/5,248       378,912             reshape_8   |                                     Conv2D_[4]             
+       nl_9_nl (Nonlinearity, CONV_2D)            [b:1,h:1,w:74,c:32]                        2,368              conv2d_9   |                   -2,368(-100.0%)   
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+10     tfl_pseudo_qconst9 (Placeholder, )         [b:32]                 32/32                                             |                   +2,368(+100.0%)   Eltwise/mul_[5]        
+       eltwise_10 (Eltwise, MUL)                  [b:1,h:1,w:74,c:32]                        2,368               nl_9_nl   |                   -2,368(-100.0%)   
+                                                                                                      tfl_pseudo_qconst9   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+11     tfl_pseudo_qconst8 (Placeholder, )         [b:32]                 32/32                                             |                   +2,368(+100.0%)   Eltwise/add_[6]        
+       eltwise_11 (Eltwise, ADD)                  [b:1,h:1,w:74,c:32]                        2,368            eltwise_10   |                   -2,368(-100.0%)   
+                                                                                                      tfl_pseudo_qconst8   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+12     reshape_12 (Reshape, RESHAPE)              [b:1,h:74,c:32]                                             eltwise_11   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+13     reshape_13 (Reshape, EXPAND_DIMS)          [b:1,h:1,w:74,c:32]                                         reshape_12   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+14     pool_14 (Pool, MAX_POOL_2D)                [b:1,h:1,w:24,c:32]                        2,304            reshape_13   |                                     Pool_[7]               
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+15     reshape_15 (Reshape, RESHAPE)              [b:1,h:24,c:32]                                                pool_14   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+16     reshape_16 (Reshape, EXPAND_DIMS)          [b:1,h:1,w:24,c:32]                                         reshape_15   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+17     conv2d_17 (Conv2D, CONV_2D)                [b:1,h:1,w:20,c:32]    5,152/5,248       102,432            reshape_16   |                                     Conv2D_[8]             
+       nl_17_nl (Nonlinearity, CONV_2D)           [b:1,h:1,w:20,c:32]                          640             conv2d_17   |                   -640(-100.0%)     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+18     tfl_pseudo_qconst5 (Placeholder, )         [b:32]                 32/32                                             |                   +640(+100.0%)     Eltwise/mul_[9]        
+       eltwise_18 (Eltwise, MUL)                  [b:1,h:1,w:20,c:32]                          640              nl_17_nl   |                   -640(-100.0%)     
+                                                                                                      tfl_pseudo_qconst5   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+19     tfl_pseudo_qconst4 (Placeholder, )         [b:32]                 32/32                                             |                   +640(+100.0%)     Eltwise/add_[10]       
+       eltwise_19 (Eltwise, ADD)                  [b:1,h:1,w:20,c:32]                          640            eltwise_18   |                   -640(-100.0%)     
+                                                                                                      tfl_pseudo_qconst4   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+20     reshape_20 (Reshape, RESHAPE)              [b:1,h:20,c:32]                                             eltwise_19   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+21     reshape_21 (Reshape, EXPAND_DIMS)          [b:1,h:1,w:20,c:32]                                         reshape_20   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+22     pool_22 (Pool, MAX_POOL_2D)                [b:1,h:1,w:6,c:32]                           576            reshape_21   |                                     Pool_[11]              
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+23     reshape_23 (Reshape, RESHAPE)              [b:1,h:6,c:32]                                                 pool_22   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+24     pool_24 (Pool, REDUCE_MAX)                 [b:1,h:1,c:32]                               192            reshape_23   |                                     Pool_[12]              
+       reshape_24_reshape (Reshape, REDUCE_MAX)   [b:1,c:32]                                                     pool_24   |                                     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+25     tfl_pseudo_qconst3 (Placeholder, )         [b:256,c:32]           8,192/8,192                                       | +1,024(+12.5%)    +8,448(+100.0%)   Dense_[13]             
+       tfl_pseudo_qconst2 (Placeholder, )         [b:256]                256/1,024                                         | -1,024(-100.0%)                     
+       gemm_25 (Gemm, FULLY_CONNECTED)            [b:1,c:256]                                8,448    reshape_24_reshape   |                   -8,448(-100.0%)   
+                                                                                                      tfl_pseudo_qconst3   | 
+                                                                                                      tfl_pseudo_qconst2   | 
+       nl_25_nl (Nonlinearity, FULLY_CONNECTED)   [b:1,c:256]                                  256               gemm_25   |                   -256(-100.0%)     
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+26     tfl_pseudo_qconst1 (Placeholder, )         [b:4,c:256]            1,024/1,024                                       | +16(+1.6%)        +1,028(+100.0%)   Dense_[14]             
+       tfl_pseudo_qconst (Placeholder, )          [b:4]                  4/16                                              | -16(-100.0%)                        
+       gemm_26 (Gemm, FULLY_CONNECTED)            [b:1,c:4]                                  1,028              nl_25_nl   |                   -1,028(-100.0%)   
+                                                                                                      tfl_pseudo_qconst1   | 
+                                                                                                       tfl_pseudo_qconst   | 
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+27     nl_27 (Nonlinearity, SOFTMAX)              [b:1,c:4]                                     60               gemm_26   |                                     Nonlinearity_[o][15]   
+------ ------------------------------------------ ---------------------- ------------- ----------- --------------------- --- ----------------- ----------------- ---------------------- 
+model/c-model: macc=1,552,928/1,542,112 -10,816(-0.7%) weights=25,392/25,392  activations=--/20,140 io=--/0
+
+
+
+Generated C-graph summary
+------------------------------------------------------------------------------------------------------------------------
+model name            : CNN_1D_distilled_global_int8
+c-name                : network
+c-node #              : 16
+c-array #             : 39
+activations size      : 20140 (1 segment)
+weights size          : 25392 (1 segment)
+macc                  : 1542112
+inputs                : ['keras_tensor_output']
+outputs               : ['nl_27_output']
+
+C-Arrays (39)
+------ ------------------------ ----------- ------------------------- ----------- --------- 
+c_id   name (*_array)           item/size   domain/mem-pool           c-type      comment   
+------ ------------------------ ----------- ------------------------- ----------- --------- 
+0      conv2d_17_bias           32/128      weights/weights           const s32             
+1      conv2d_17_output         640/640     activations/**default**   s8                    
+2      conv2d_17_scratch0       6208/6208   activations/**default**   s8                    
+3      conv2d_17_weights        5120/5120   weights/weights           const s8              
+4      conv2d_1_bias            32/128      weights/weights           const s32             
+5      conv2d_1_output          7552/7552   activations/**default**   s8                    
+6      conv2d_1_scratch0        6108/6108   activations/**default**   s8                    
+7      conv2d_1_weights         4320/4320   weights/weights           const s8              
+8      conv2d_9_bias            32/128      weights/weights           const s32             
+9      conv2d_9_output          2368/2368   activations/**default**   s8                    
+10     conv2d_9_scratch0        6208/6208   activations/**default**   s8                    
+11     conv2d_9_weights         5120/5120   weights/weights           const s8              
+12     eltwise_10_output        2368/2368   activations/**default**   s8                    
+13     eltwise_11_output        2368/2368   activations/**default**   s8                    
+14     eltwise_18_output        640/640     activations/**default**   s8                    
+15     eltwise_19_output        640/640     activations/**default**   s8                    
+16     eltwise_2_output         7552/7552   activations/**default**   s8                    
+17     eltwise_3_output         7552/7552   activations/**default**   s8                    
+18     gemm_25_bias             256/1024    weights/weights           const s32             
+19     gemm_25_output           256/256     activations/**default**   s8                    
+20     gemm_25_scratch0         1312/2624   activations/**default**   s16                   
+21     gemm_25_weights          8192/8192   weights/weights           const s8              
+22     gemm_26_bias             4/16        weights/weights           const s32             
+23     gemm_26_output           4/4         activations/**default**   s8                    
+24     gemm_26_scratch0         276/552     activations/**default**   s16                   
+25     gemm_26_weights          1024/1024   weights/weights           const s8              
+26     keras_tensor_output      6480/6480   activations/**default**   s8          /input    
+27     nl_27_output             4/4         activations/**default**   s8          /output   
+28     nl_27_scratch0           256/1024    activations/**default**   s32                   
+29     pool_14_output           768/768     activations/**default**   s8                    
+30     pool_22_output           192/192     activations/**default**   s8                    
+31     pool_24_output           32/32       activations/**default**   s8                    
+32     pool_6_output            2496/2496   activations/**default**   s8                    
+33     tfl_pseudo_qconst12_4D   32/32       weights/weights           const s8              
+34     tfl_pseudo_qconst13_4D   32/32       weights/weights           const s8              
+35     tfl_pseudo_qconst4_4D    32/32       weights/weights           const s8              
+36     tfl_pseudo_qconst5_4D    32/32       weights/weights           const s8              
+37     tfl_pseudo_qconst8_4D    32/32       weights/weights           const s8              
+38     tfl_pseudo_qconst9_4D    32/32       weights/weights           const s8              
+------ ------------------------ ----------- ------------------------- ----------- --------- 
+
+C-Layers (16)
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+c_id   name (*_layer)   id   layer_type      macc      rom    tensors                     shape (array id)        
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+0      conv2d_1         1    Conv2D          1019552   4448   I: keras_tensor_output      int8(1x240x27) (26)     
+                                                              S: conv2d_1_scratch0                                
+                                                              W: conv2d_1_weights         int8(32x1x5x27) (7)     
+                                                              W: conv2d_1_bias            int32(32) (4)           
+                                                              O: conv2d_1_output          int8(1x1x236x32) (5)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+1      eltwise_2        2    Eltwise/mul     7552      32     I: conv2d_1_output          int8(1x1x236x32) (5)    
+                                                              W: tfl_pseudo_qconst13_4D   int8(1x1x32) (34)       
+                                                              O: eltwise_2_output         int8(1x1x236x32) (16)   
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+2      eltwise_3        3    Eltwise/add     7552      32     I: eltwise_2_output         int8(1x1x236x32) (16)   
+                                                              W: tfl_pseudo_qconst12_4D   int8(1x1x32) (33)       
+                                                              O: eltwise_3_output         int8(1x1x236x32) (17)   
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+3      pool_6           6    Pool            7488      0      I: eltwise_3_output         int8(1x1x236x32) (17)   
+                                                              O: pool_6_output            int8(1x1x78x32) (32)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+4      conv2d_9         9    Conv2D          378912    5248   I: pool_6_output            int8(1x1x78x32) (32)    
+                                                              S: conv2d_9_scratch0                                
+                                                              W: conv2d_9_weights         int8(32x1x5x32) (11)    
+                                                              W: conv2d_9_bias            int32(32) (8)           
+                                                              O: conv2d_9_output          int8(1x1x74x32) (9)     
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+5      eltwise_10       10   Eltwise/mul     2368      32     I: conv2d_9_output          int8(1x1x74x32) (9)     
+                                                              W: tfl_pseudo_qconst9_4D    int8(1x1x32) (38)       
+                                                              O: eltwise_10_output        int8(1x1x74x32) (12)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+6      eltwise_11       11   Eltwise/add     2368      32     I: eltwise_10_output        int8(1x1x74x32) (12)    
+                                                              W: tfl_pseudo_qconst8_4D    int8(1x1x32) (37)       
+                                                              O: eltwise_11_output        int8(1x1x74x32) (13)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+7      pool_14          14   Pool            2304      0      I: eltwise_11_output        int8(1x1x74x32) (13)    
+                                                              O: pool_14_output           int8(1x1x24x32) (29)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+8      conv2d_17        17   Conv2D          102432    5248   I: pool_14_output           int8(1x1x24x32) (29)    
+                                                              S: conv2d_17_scratch0                               
+                                                              W: conv2d_17_weights        int8(32x1x5x32) (3)     
+                                                              W: conv2d_17_bias           int32(32) (0)           
+                                                              O: conv2d_17_output         int8(1x1x20x32) (1)     
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+9      eltwise_18       18   Eltwise/mul     640       32     I: conv2d_17_output         int8(1x1x20x32) (1)     
+                                                              W: tfl_pseudo_qconst5_4D    int8(1x1x32) (36)       
+                                                              O: eltwise_18_output        int8(1x1x20x32) (14)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+10     eltwise_19       19   Eltwise/add     640       32     I: eltwise_18_output        int8(1x1x20x32) (14)    
+                                                              W: tfl_pseudo_qconst4_4D    int8(1x1x32) (35)       
+                                                              O: eltwise_19_output        int8(1x1x20x32) (15)    
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+11     pool_22          22   Pool            576       0      I: eltwise_19_output        int8(1x1x20x32) (15)    
+                                                              O: pool_22_output           int8(1x1x6x32) (30)     
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+12     pool_24          24   Pool            192       0      I: pool_22_output           int8(1x1x6x32) (30)     
+                                                              O: pool_24_output           int8(1x1x32) (31)       
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+13     gemm_25          25   Dense           8448      9216   I: pool_24_output           int8(1x1x32) (31)       
+                                                              S: gemm_25_scratch0                                 
+                                                              W: gemm_25_weights          int8(256x32) (21)       
+                                                              W: gemm_25_bias             int32(256) (18)         
+                                                              O: gemm_25_output           int8(1x256) (19)        
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+14     gemm_26          26   Dense           1028      1040   I: gemm_25_output           int8(1x256) (19)        
+                                                              S: gemm_26_scratch0                                 
+                                                              W: gemm_26_weights          int8(4x256) (25)        
+                                                              W: gemm_26_bias             int32(4) (22)           
+                                                              O: gemm_26_output           int8(1x4) (23)          
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+15     nl_27            27   Nonlinearity    60        0      I: gemm_26_output           int8(1x4) (23)          
+                                                              S: nl_27_scratch0                                   
+                                                              O: nl_27_output             int8(1x4) (27)          
+------ ---------------- ---- --------------- --------- ------ --------------------------- ----------------------- 
+
+
+
+Number of operations per c-layer
+------- ------ --------------------------- ----------- ------------ 
+c_id    m_id   name (type)                         #op         type 
+------- ------ --------------------------- ----------- ------------ 
+0       1      conv2d_1 (Conv2D)             1,019,552   smul_s8_s8 
+1       2      eltwise_2 (Eltwise/mul)           7,552     op_s8_s8 
+2       3      eltwise_3 (Eltwise/add)           7,552     op_s8_s8 
+3       6      pool_6 (Pool)                     7,488   smul_s8_s8 
+4       9      conv2d_9 (Conv2D)               378,912   smul_s8_s8 
+5       10     eltwise_10 (Eltwise/mul)          2,368     op_s8_s8 
+6       11     eltwise_11 (Eltwise/add)          2,368     op_s8_s8 
+7       14     pool_14 (Pool)                    2,304   smul_s8_s8 
+8       17     conv2d_17 (Conv2D)              102,432   smul_s8_s8 
+9       18     eltwise_18 (Eltwise/mul)            640     op_s8_s8 
+10      19     eltwise_19 (Eltwise/add)            640     op_s8_s8 
+11      22     pool_22 (Pool)                      576   smul_s8_s8 
+12      24     pool_24 (Pool)                      192   smul_s8_s8 
+13      25     gemm_25 (Dense)                   8,448   smul_s8_s8 
+14      26     gemm_26 (Dense)                   1,028   smul_s8_s8 
+15      27     nl_27 (Nonlinearity)                 60     op_s8_s8 
+------- ------ --------------------------- ----------- ------------ 
+total                                        1,542,112 
+
+Number of operation types
+---------------- ----------- ----------- 
+operation type             #           % 
+---------------- ----------- ----------- 
+smul_s8_s8         1,520,932       98.6% 
+op_s8_s8              21,180        1.4% 
+
+Complexity report (model)
+------ --------------------- ------------------------- ------------------------- ------ 
+m_id   name                  c_macc                    c_rom                     c_id   
+------ --------------------- ------------------------- ------------------------- ------ 
+1      conv2d_1              ||||||||||||||||  66.1%   ||||||||          17.5%   [0]    
+2      tfl_pseudo_qconst13   |                  0.5%   |                  0.1%   [1]    
+3      tfl_pseudo_qconst12   |                  0.5%   |                  0.1%   [2]    
+6      pool_6                |                  0.5%   |                  0.0%   [3]    
+9      conv2d_9              ||||||            24.6%   |||||||||         20.7%   [4]    
+10     tfl_pseudo_qconst9    |                  0.2%   |                  0.1%   [5]    
+11     tfl_pseudo_qconst8    |                  0.2%   |                  0.1%   [6]    
+14     pool_14               |                  0.1%   |                  0.0%   [7]    
+17     conv2d_17             ||                 6.6%   |||||||||         20.7%   [8]    
+18     tfl_pseudo_qconst5    |                  0.0%   |                  0.1%   [9]    
+19     tfl_pseudo_qconst4    |                  0.0%   |                  0.1%   [10]   
+22     pool_22               |                  0.0%   |                  0.0%   [11]   
+24     pool_24               |                  0.0%   |                  0.0%   [12]   
+25     tfl_pseudo_qconst3    |                  0.5%   ||||||||||||||||  36.3%   [13]   
+26     tfl_pseudo_qconst1    |                  0.1%   ||                 4.1%   [14]   
+27     nl_27                 |                  0.0%   |                  0.0%   [15]   
+------ --------------------- ------------------------- ------------------------- ------ 
+macc=1,542,112 weights=25,392 act=20,140 ram_io=0
+ 
+ Requested memory size by section - "stm32h7" target
+ ------------------------------ -------- -------- ------- -------- 
+ module                             text   rodata    data      bss 
+ ------------------------------ -------- -------- ------- -------- 
+ NetworkRuntime1200_CM7_GCC.a     16,348        0       0        0 
+ network.o                         2,890    2,046   2,760       48 
+ lib (toolchain)*                    104        0       0        0 
+ ------------------------------ -------- -------- ------- -------- 
+ RT total**                       19,342    2,046   2,760       48 
+ ------------------------------ -------- -------- ------- -------- 
+ weights                               0   25,392       0        0 
+ activations                           0        0       0   20,140 
+ states                                0        0       0        0 
+ io                                    0        0       0        0 
+ ------------------------------ -------- -------- ------- -------- 
+ TOTAL                            19,342   27,438   2,760   20,188 
+ ------------------------------ -------- -------- ------- -------- 
+ *  toolchain objects (libm/libgcc*)
+ ** RT AI runtime objects (kernels+infrastructure)
+  
+  Summary - "stm32h7" target
+  ---------------------------------------------------
+               FLASH (ro)      %*   RAM (rw)       % 
+  ---------------------------------------------------
+  RT total         24,148   48.7%      2,808   12.2% 
+  ---------------------------------------------------
+  TOTAL            49,540             22,948         
+  ---------------------------------------------------
+  *  rt/total
+
